@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_ORDER_BACKEND?: "sheet" | "laravel";
-  readonly VITE_SHEET_CSV_URL?: string;
+  /** Origin of the Laravel API. Empty (the default) means same-origin. */
   readonly VITE_API_URL?: string;
 }
 

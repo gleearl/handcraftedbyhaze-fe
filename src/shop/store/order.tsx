@@ -9,13 +9,12 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef,
   type Dispatch, type ReactNode,
 } from "react";
-import { orderSource } from "../lib/api";
-import type { Fulfillment, Product } from "../lib/api/types";
-import { FALLBACK_PRODUCTS } from "../lib/fallback-products";
+import { fetchProducts } from "../../lib/api/shop";
+import type { Fulfillment, Product } from "../../lib/api/types";
 import {
   cartCount as countOf, cartLines, clampCartToStock, limitFor, productById,
   subtotal as subtotalOf, type Cart, type CartLine,
-} from "../lib/cart";
+} from "../../lib/cart";
 
 export const STEPS = ["welcome", "products", "details", "payment", "review", "done"] as const;
 export type StepName = (typeof STEPS)[number];
@@ -46,6 +45,9 @@ interface State {
   /** Never persisted — a File can't survive a reload. */
   proofFile: File | null;
   products: Product[];
+  /* There is no bundled fallback any more, so the products step has to be able
+     to render all three of these rather than always having something to show. */
+  catalogue: "loading" | "ready" | "error";
   /** Set after a stepper press so the card can put focus somewhere sensible. */
   focusRequest: { id: string; act: "inc" | "dec" } | null;
 }
@@ -56,6 +58,8 @@ type Action =
   | { type: "setDetails"; patch: Partial<Details> }
   | { type: "setProof"; file: File | null }
   | { type: "setProducts"; products: Product[] }
+  | { type: "catalogueFailed" }
+  | { type: "reloadCatalogue" }
   | { type: "restore"; cart: Cart; details: Details; step: number }
   | { type: "focusHandled" }
   | { type: "reset" };
@@ -65,7 +69,8 @@ const initialState: State = {
   cart: {},
   details: EMPTY_DETAILS,
   proofFile: null,
-  products: FALLBACK_PRODUCTS,
+  products: [],
+  catalogue: "loading",
   focusRequest: null,
 };
 
@@ -100,8 +105,14 @@ function reducer(state: State, action: Action): State {
       // A cart restored from sessionStorage may exceed stock the owner has
       // since reduced.
       const { cart } = clampCartToStock(state.cart, action.products);
-      return { ...state, products: action.products, cart };
+      return { ...state, products: action.products, cart, catalogue: "ready" };
     }
+
+    case "catalogueFailed":
+      return { ...state, catalogue: "error" };
+
+    case "reloadCatalogue":
+      return { ...state, catalogue: "loading" };
 
     case "restore":
       return { ...state, cart: action.cart, details: action.details, step: action.step };
@@ -110,7 +121,7 @@ function reducer(state: State, action: Action): State {
       return { ...state, focusRequest: null };
 
     case "reset":
-      return { ...initialState, products: state.products };
+      return { ...initialState, products: state.products, catalogue: state.catalogue };
 
     default:
       return state;
@@ -161,6 +172,7 @@ interface OrderContext {
   state: State;
   dispatch: Dispatch<Action>;
   stepName: StepName;
+  reloadCatalogue: () => void;
   lines: CartLine[];
   count: number;
   subtotal: number;
@@ -189,25 +201,31 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   useEffect(() => { save(state); }, [state.step, state.cart, state.details]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Not awaited at boot on purpose: the welcome screen shouldn't wait on the
-     network. Products aren't on screen yet, so swapping them in is invisible. */
+     network. Products aren't on screen yet, so loading them behind it is free. */
+  const loadCatalogue = useCallback(() => {
+    dispatch({ type: "reloadCatalogue" });
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+
+    fetchProducts(ctrl.signal)
+      .then((products) => dispatch({ type: "setProducts", products }))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        console.error("[products] Couldn't load the catalogue.", err);
+        dispatch({ type: "catalogueFailed" });
+      })
+      .finally(() => clearTimeout(timer));
+
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, []);
+
   const loaded = useRef(false);
   useEffect(() => {
     if (loaded.current) return;   // StrictMode double-invokes effects in dev
     loaded.current = true;
-
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6000);
-
-    orderSource.fetchProducts(ctrl.signal)
-      .then((products) => dispatch({ type: "setProducts", products }))
-      .catch((err) => {
-        // Never leave the shop empty — fall through to the bundled list.
-        console.warn("[products] Couldn't load the catalogue; using the built-in list.", err);
-      })
-      .finally(() => clearTimeout(timer));
-
-    return () => clearTimeout(timer);
-  }, []);
+    loadCatalogue();
+  }, [loadCatalogue]);
 
   const lines = useMemo(() => cartLines(state.cart, state.products), [state.cart, state.products]);
   const count = useMemo(() => countOf(lines), [lines]);
@@ -217,7 +235,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<OrderContext>(() => ({
     state, dispatch, stepName: STEPS[state.step], lines, count, subtotal, goTo,
-  }), [state, lines, count, subtotal, goTo]);
+    reloadCatalogue: loadCatalogue,
+  }), [state, lines, count, subtotal, goTo, loadCatalogue]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -11,33 +11,6 @@
 <script type="module" src="/src/main.tsx"></script>
 </head>
 <body>
-
-<!--
-  Netlify needs to see a plain HTML form at build time to register the fields.
-  Vite emits this file as-is into dist/, which is the only reason Netlify Forms
-  knows what "proof" or "instagram" are. The visible UI is React; this hidden
-  form is only a declaration.
-
-  Do not remove it, and keep its field names in sync with the FormData keys in
-  src/lib/api/sheet-netlify.ts. A field missing here is silently dropped.
-
-  Only used when VITE_ORDER_BACKEND=sheet. The Laravel adapter posts to its own
-  API and ignores this entirely.
--->
-<form name="order" data-netlify="true" netlify-honeypot="bot-field" hidden>
-  <input type="text" name="name">
-  <input type="text" name="instagram">
-  <input type="text" name="fulfillment">
-  <textarea name="address"></textarea>
-  <textarea name="notes"></textarea>
-  <textarea name="items"></textarea>
-  <input type="text" name="subtotal">
-  <input type="text" name="reference">
-  <input type="text" name="bot-field">
-  <input type="file" name="proof">
-</form>
-
 <div id="root"></div>
-
 </body>
 </html>

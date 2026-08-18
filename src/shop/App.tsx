@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { CONFIG } from "./config";
-import { orderSource } from "./lib/api";
-import { itemsAsText } from "./lib/cart";
+import { CONFIG } from "../config";
+import { submitOrder as postOrder } from "../lib/api/shop";
+import { ApiError } from "../lib/api/http";
+import { itemsAsText } from "../lib/cart";
 import {
   SUBMIT_FAILED, validateDetails, validatePayment, validateProducts, type Invalid,
-} from "./lib/validate";
+} from "../lib/validate";
 import { clearSaved, PROGRESS_STEPS, STEPS, useOrder } from "./store/order";
 import { TopBar } from "./components/TopBar";
 import { ActionBar } from "./components/ActionBar";
@@ -73,12 +74,14 @@ export function App() {
     };
 
     try {
-      await orderSource.submitOrder(payload);
+      await postOrder(payload);
       clearSaved();
       goTo(STEPS.indexOf("done"));
     } catch (err) {
       console.error(err);
-      setSubmitError(SUBMIT_FAILED);
+      setSubmitError(err instanceof ApiError && err.status === 422
+        ? Object.values(err.fieldErrors)[0] ?? SUBMIT_FAILED
+        : SUBMIT_FAILED);
     } finally {
       setSending(false);
     }

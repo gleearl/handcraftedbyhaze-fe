@@ -1,6 +1,6 @@
-import { CONFIG } from "../config";
+import { CONFIG } from "../../config";
 import { Button, ButtonLink } from "../components/Button";
-import type { Fulfillment } from "../lib/api/types";
+import type { Fulfillment } from "../../lib/api/types";
 
 export function Done({
   fulfillment, onRestart,

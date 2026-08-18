@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import type { Product } from "../lib/api/types";
-import { limitFor } from "../lib/cart";
-import { peso } from "../lib/format";
+import type { Product } from "../../lib/api/types";
+import { limitFor } from "../../lib/cart";
+import { peso } from "../../lib/format";
 
 interface Props {
   product: Product;

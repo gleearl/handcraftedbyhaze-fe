@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { CONFIG } from "../config";
+import { CONFIG } from "../../config";
 import { Card, CardLabel, Callout } from "../components/Card";
 import { Button } from "../components/Button";
 import { Field, INPUT } from "../components/Field";
 import { ItemRows } from "../components/Summary";
 import { UploadBox } from "../components/UploadBox";
 import { useOrder } from "../store/order";
-import type { Invalid } from "../lib/validate";
+import type { Invalid } from "../../lib/validate";
 
 export function Payment({ invalid }: { invalid: Invalid | null }) {
   const { state, dispatch, lines, subtotal } = useOrder();

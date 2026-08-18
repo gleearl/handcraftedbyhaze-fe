@@ -1,8 +1,8 @@
-import { CONFIG } from "../config";
+import { CONFIG } from "../../config";
 import { Field, FieldSet, RadioOption, INPUT, TEXTAREA } from "../components/Field";
 import { Callout } from "../components/Card";
 import { useOrder } from "../store/order";
-import type { Invalid } from "../lib/validate";
+import type { Invalid } from "../../lib/validate";
 
 export function Details({ invalid }: { invalid: Invalid | null }) {
   const { state, dispatch } = useOrder();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_DETAILS } from "../store/order";
+import { EMPTY_DETAILS } from "../shop/store/order";
 import { validateDetails, validatePayment, validateProducts, validateProofFile } from "./validate";
 
 const details = (over: Partial<typeof EMPTY_DETAILS>) => ({ ...EMPTY_DETAILS, ...over });

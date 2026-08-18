@@ -1,4 +1,4 @@
-import { CONFIG } from "../config";
+import { CONFIG } from "../../config";
 import { Card } from "../components/Card";
 import { ErrorText } from "../components/ErrorText";
 import { ItemRows, DetailRows } from "../components/Summary";

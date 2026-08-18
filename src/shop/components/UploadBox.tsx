@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { CONFIG } from "../config";
-import { validateProofFile } from "../lib/validate";
+import { CONFIG } from "../../config";
+import { validateProofFile } from "../../lib/validate";
 import { ErrorText } from "./ErrorText";
 
 interface Props {

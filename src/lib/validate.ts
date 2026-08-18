@@ -7,7 +7,7 @@
    ========================================================================== */
 
 import { CONFIG } from "../config";
-import type { Details } from "../store/order";
+import type { Details } from "../shop/store/order";
 
 /** Which error slot the message belongs in, and which field to focus. */
 export interface Invalid {

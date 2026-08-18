@@ -1,5 +1,5 @@
 import { Button } from "./Button";
-import { peso } from "../lib/format";
+import { peso } from "../../lib/format";
 
 export function ActionBar({
   showTotal, count, subtotal, label, disabled, onNext,

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { peso } from "../lib/format";
-import type { CartLine } from "../lib/cart";
+import { peso } from "../../lib/format";
+import type { CartLine } from "../../lib/cart";
 
 export function Summary({ children }: { children: ReactNode }) {
   return <div className="grid gap-2.5 text-[.9375rem]">{children}</div>;
