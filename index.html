@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Order Form — Handcrafted by Haze</title>
+<meta name="description" content="Order handmade air-dry clay miniatures from Handcrafted by Haze. Made to order, meetup in Cebu or delivery nationwide.">
+<meta name="theme-color" content="#f5faf2">
+<link rel="icon" href="assets/favicon.svg">
+<link rel="preload" href="assets/fonts/playpen-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!--
+  Netlify needs to see a plain HTML form at build time to register the fields.
+  The visible UI below is custom; this hidden form is only a declaration.
+  Do not remove it, and keep its field names in sync with app.js submitOrder().
+-->
+<form name="order" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="text" name="name">
+  <input type="text" name="instagram">
+  <input type="text" name="fulfillment">
+  <textarea name="address"></textarea>
+  <textarea name="notes"></textarea>
+  <textarea name="items"></textarea>
+  <input type="text" name="subtotal">
+  <input type="text" name="reference">
+  <input type="text" name="bot-field">
+  <input type="file" name="proof">
+</form>
+
+<header class="topbar" id="topbar" hidden>
+  <button type="button" class="topbar__back" id="backBtn" aria-label="Go back to the previous step">
+    <span aria-hidden="true">←</span>
+  </button>
+  <div class="progress" id="progress" role="progressbar" aria-label="Order progress" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+    <div class="progress__fill" id="progressFill"></div>
+  </div>
+  <span class="topbar__label" id="stepLabel">Step 1 of 4</span>
+</header>
+
+<main id="main">
+
+  <!-- 1. Welcome ------------------------------------------------------- -->
+  <section class="step step--welcome" id="step-welcome" aria-labelledby="welcome-title">
+    <p class="eyebrow" id="shopName">Handcrafted by Haze</p>
+    <h1 id="welcome-title">Order your clay miniature</h1>
+    <p class="lede">Tiny air-dry clay pieces, shaped and painted by hand — one at a time, just for you.</p>
+
+    <ul class="chips">
+      <li class="chip"><span aria-hidden="true">🕒</span> Made to order · ready in about 1 week</li>
+      <li class="chip"><span aria-hidden="true">📍</span> Meetup at IT Park, Cebu City</li>
+      <li class="chip"><span aria-hidden="true">📦</span> Delivery available · fee shouldered by you</li>
+    </ul>
+
+    <p class="note">Fill this out and send your proof of payment. I'll confirm your order in a DM.</p>
+
+    <div class="stack-actions">
+      <button type="button" class="btn btn--primary" id="startBtn">Start your order</button>
+    </div>
+  </section>
+
+  <!-- 2. Products ------------------------------------------------------ -->
+  <section class="step" id="step-products" aria-labelledby="products-title" hidden>
+    <h2 id="products-title">Pick your pieces</h2>
+    <p class="lede lede--sm">Tap <span class="inline-plus" aria-hidden="true">+</span> to add. You can order more than one.</p>
+
+    <div class="products" id="productList"></div>
+
+    <p class="err" id="err-cart" role="alert"></p>
+  </section>
+
+  <!-- 3. Details ------------------------------------------------------- -->
+  <section class="step" id="step-details" aria-labelledby="details-title" hidden>
+    <h2 id="details-title">Your details</h2>
+    <p class="lede lede--sm">So I know who to reach and where this little one is headed.</p>
+
+    <div class="field">
+      <label for="f-name">Name</label>
+      <input type="text" id="f-name" name="name" autocomplete="name" placeholder="Juan dela Cruz" enterkeyhint="next">
+      <p class="err" id="err-name" role="alert"></p>
+    </div>
+
+    <div class="field">
+      <label for="f-ig">Instagram handle</label>
+      <div class="input-prefix">
+        <span aria-hidden="true">@</span>
+        <input type="text" id="f-ig" name="instagram" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="yourhandle" enterkeyhint="next">
+      </div>
+      <p class="hint">This is where I'll message you to confirm.</p>
+      <p class="err" id="err-ig" role="alert"></p>
+    </div>
+
+    <fieldset class="field">
+      <legend>How would you like to get it?</legend>
+      <label class="option" for="f-meetup">
+        <input type="radio" id="f-meetup" name="fulfillment" value="Meetup">
+        <span class="option__body">
+          <span class="option__title">Meetup</span>
+          <span class="option__sub">IT Park, Cebu City · free</span>
+        </span>
+      </label>
+      <label class="option" for="f-delivery">
+        <input type="radio" id="f-delivery" name="fulfillment" value="Delivery">
+        <span class="option__body">
+          <span class="option__title">Delivery</span>
+          <span class="option__sub">Courier fee shouldered by you</span>
+        </span>
+      </label>
+      <p class="err" id="err-fulfillment" role="alert"></p>
+    </fieldset>
+
+    <div class="callout" id="meetupNote" hidden>
+      We'll agree on the exact spot and time at IT Park over DM once your piece is ready.
+    </div>
+
+    <div class="field" id="addressWrap" hidden>
+      <label for="f-address">Delivery address</label>
+      <textarea id="f-address" name="address" rows="3" autocomplete="street-address" placeholder="House / unit, street, barangay, city, province, ZIP"></textarea>
+      <p class="hint">I'll quote the courier fee in your DM before shipping out.</p>
+      <p class="err" id="err-address" role="alert"></p>
+    </div>
+
+    <div class="field">
+      <label for="f-notes">Notes <span class="optional">(optional)</span></label>
+      <textarea id="f-notes" name="notes" rows="3" placeholder="Color requests, a name to paint on it, gift wrapping…"></textarea>
+    </div>
+  </section>
+
+  <!-- 4. Payment ------------------------------------------------------- -->
+  <section class="step" id="step-payment" aria-labelledby="payment-title" hidden>
+    <h2 id="payment-title">Payment</h2>
+    <p class="lede lede--sm">Send the item total via GCash, then upload your receipt below.</p>
+
+    <div class="card card--total">
+      <div class="summary" id="paySummary"></div>
+    </div>
+
+    <div class="card card--gcash">
+      <p class="card__label">GCash</p>
+      <p class="gcash__name" id="gcashName">—</p>
+      <div class="gcash__row">
+        <span class="gcash__number" id="gcashNumber">—</span>
+        <button type="button" class="btn btn--ghost btn--sm" id="copyBtn">Copy</button>
+      </div>
+      <img class="gcash__qr" id="gcashQr" src="assets/gcash-qr.png" alt="GCash QR code" width="437" height="600">
+    </div>
+
+    <div class="callout callout--warm" id="feeNote">
+      Please send the item total only. If you chose delivery, I'll quote the courier fee in your DM and we'll settle it separately.
+    </div>
+
+    <div class="field">
+      <label for="f-ref">GCash reference number <span class="optional">(optional)</span></label>
+      <input type="text" id="f-ref" name="reference" inputmode="numeric" autocomplete="off" placeholder="e.g. 1029 384 756 21">
+    </div>
+
+    <div class="field">
+      <span class="label-like" id="proofLabel">Proof of payment</span>
+      <label class="upload" for="f-proof" id="uploadBox">
+        <input type="file" id="f-proof" name="proof" accept="image/*" aria-describedby="proofHint">
+        <span class="upload__inner" id="uploadInner">
+          <span class="upload__icon" aria-hidden="true">🧾</span>
+          <span class="upload__text">Upload your GCash screenshot</span>
+          <span class="upload__sub">JPG or PNG · up to 5&nbsp;MB</span>
+        </span>
+      </label>
+      <p class="hint" id="proofHint">Make sure the amount and reference number are readable.</p>
+      <p class="err" id="err-proof" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- 5. Review -------------------------------------------------------- -->
+  <section class="step" id="step-review" aria-labelledby="review-title" hidden>
+    <h2 id="review-title">Almost there</h2>
+    <p class="lede lede--sm">One last look before you send it over.</p>
+
+    <div class="card">
+      <div class="summary" id="reviewItems"></div>
+    </div>
+
+    <div class="card">
+      <div class="summary" id="reviewDetails"></div>
+    </div>
+
+    <p class="err" id="err-submit" role="alert"></p>
+  </section>
+
+  <!-- 6. Confirmation -------------------------------------------------- -->
+  <section class="step step--done" id="step-done" aria-labelledby="done-title" hidden>
+    <div class="done__mark" aria-hidden="true">✓</div>
+    <h2 id="done-title">Order received!</h2>
+    <p class="lede">Thank you! I'll check your payment and confirm your order in an Instagram DM, usually within the day.</p>
+
+    <ul class="recap">
+      <li><strong>Made to order.</strong> Your piece takes about a week to shape, dry, and paint.</li>
+      <li id="doneFulfillment"><strong>Handover.</strong> We'll sort out the details in your DM.</li>
+      <li><strong>Keep an eye on your DMs</strong> — including your message requests, in case we're not following each other yet.</li>
+    </ul>
+
+    <div class="stack-actions">
+      <a class="btn btn--primary" id="igLink" href="#" target="_blank" rel="noopener">Open Instagram</a>
+      <button type="button" class="btn btn--ghost" id="restartBtn">Place another order</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Sticky bottom bar: total + primary action -->
+<div class="actionbar" id="actionbar" hidden>
+  <div class="actionbar__inner">
+    <div class="actionbar__total" id="actionbarTotal" hidden>
+      <span class="actionbar__count" id="cartCount">0 items</span>
+      <span class="actionbar__amount" id="cartTotal">₱0</span>
+    </div>
+    <button type="button" class="btn btn--primary" id="nextBtn">Continue</button>
+  </div>
+</div>
+
+<footer class="footer" id="footer">
+  <p>Handmade in Cebu · <span id="footerHandle">@handcraftedbyhaze</span></p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
