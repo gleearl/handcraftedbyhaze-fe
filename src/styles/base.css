@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Base layer — the handful of rules utilities are the wrong tool for.
+
+   Everything that CAN be a utility IS one, in the components. What lives here
+   is @font-face, keyframes, the reduced-motion override, and a few element
+   defaults that would otherwise need repeating on every node.
+   ========================================================================== */
+
+/* Playpen Sans, self-hosted so there's no third-party request and no
+   dependency on Google's CDN staying up. Latin subset, variable 400-700.
+   To update it, replace the .woff2 in public/assets/fonts/ — nothing else
+   changes. The path is stable because the file is served from public/, not
+   routed through the bundler; index.html preloads it by that exact href. */
+@font-face {
+  font-family: "Playpen Sans";
+  src: url("/assets/fonts/playpen-sans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface-brand);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Focus is always visible, and always clears 3:1 against its surroundings. */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Steps swap in and out; without this Chrome "helpfully" preserves the old
+   scroll position and lands the new step mid-page. */
+main {
+  overflow-anchor: none;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes pop {
+  0%   { transform: scale(.6); opacity: 0; }
+  70%  { transform: scale(1.06); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

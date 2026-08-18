@@ -1,0 +1,136 @@
+/* ==========================================================================
+   Handcrafted by Haze — design tokens
+
+   Ported verbatim from the original styles.css. Two layers: the raw ramps,
+   then semantic aliases. Components use the semantic layer ONLY — to retheme,
+   edit Layer 2 and nothing else.
+
+   Tailwind v4's @theme *is* CSS custom properties, so every token below is
+   both a variable you can read and a utility you can type: --color-action
+   gives you bg-action, --font-display gives you font-display.
+
+   THE ONE RULE: --color-moss-500 (#84B067) is 2.5:1 on white. It is a fill,
+   never text, and never carries white text. Green text uses moss-700.
+   `npm run lint:contrast` fails the build if that slips.
+   ========================================================================== */
+
+@import "tailwindcss";
+
+@theme {
+  /* ============================================
+     LAYER 1 — Raw ramps
+     ============================================ */
+
+  /* Primary — Moss (hue 96) */
+  --color-moss-50:  #F5FAF2;
+  --color-moss-100: #E7F3E0;
+  --color-moss-200: #D1E7C2;
+  --color-moss-300: #B6D6A0;
+  --color-moss-400: #9BC380;
+  --color-moss-500: #84B067; /* base — fill only, see the rule above */
+  --color-moss-600: #6C994F;
+  --color-moss-700: #577C3E;
+  --color-moss-800: #415E2E;
+  --color-moss-900: #2C401F;
+  --color-moss-950: #1B2713;
+
+  /* Neutrals — hue-matched, 6-20% saturation */
+  --color-grey-0:   #FFFFFF;
+  --color-grey-50:  #F8FAF7;
+  --color-grey-100: #F1F3EF;
+  --color-grey-200: #E1E5DF;
+  --color-grey-300: #CACFC7;
+  --color-grey-400: #A6ADA1;
+  --color-grey-500: #848D7F;
+  --color-grey-600: #687162;
+  --color-grey-700: #525A4C;
+  --color-grey-800: #383F34;
+  --color-grey-900: #242921;
+  --color-grey-950: #151813;
+
+  /* Accent — Clay (hue 24) */
+  --color-clay-100: #F4E3D7;
+  --color-clay-500: #CF8859;
+  --color-clay-600: #BA6B36;
+  --color-clay-700: #92542A;
+
+  /* Feedback */
+  --color-red-50:  #FAEEED;
+  --color-red-600: #B63D2B;
+  --color-red-700: #973121;
+
+  /* ============================================
+     LAYER 2 — Semantic aliases (use these)
+     ============================================ */
+
+  /* Surfaces */
+  --color-surface:            var(--color-grey-0);
+  --color-surface-subtle:     var(--color-grey-50);
+  --color-surface-brand:      var(--color-moss-50);   /* page background */
+  --color-surface-brand-soft: var(--color-moss-100);
+  --color-surface-accent:     var(--color-clay-100);
+
+  /* Text.
+     Named `fg` rather than `text` so the utility reads `text-fg-muted` instead
+     of `text-text-muted`. Old name → new: --text → fg, --text-secondary →
+     fg-secondary, --text-muted → fg-muted, --text-brand → fg-brand,
+     --text-inverse → fg-inverse, --text-on-action → on-action. */
+  --color-fg:           var(--color-grey-800); /* 10.89:1 on white */
+  --color-fg-secondary: var(--color-grey-700); /*  7.18:1 */
+  --color-fg-muted:     var(--color-grey-600); /*  5.09:1 */
+  --color-fg-brand:     var(--color-moss-700); /*  4.82:1 */
+  --color-fg-inverse:   var(--color-grey-0);
+
+  /* Button labels. moss-500 + moss-950 computes at 6.23:1, but two tones of
+     one hue read far flatter than that number suggests — WCAG 2.x luminance
+     math is generous with same-hue pairs. Using the palette's other verified
+     pairing instead: dark fill, white label. */
+  --color-on-action:          var(--color-grey-0);   /* 4.82:1 on moss-700 */
+  --color-on-action-disabled: var(--color-moss-950); /* 9.7:1  on moss-300 */
+
+  /* Borders. Named without a "border-" prefix so the utility reads
+     `border-field`, not `border-border-field` — Tailwind prepends the property
+     itself. `rule` is the decorative one (the old --border); control
+     boundaries need 3:1 and use `field`.
+     Note: COLORS.md calls grey-400 the lightest token that clears 3:1, but
+     its own table puts it at 2.30 on white. grey-500 (3.44) is the real
+     floor, so that's what outlines inputs and other controls here. */
+  --color-rule:            var(--color-grey-300);
+  --color-field:           var(--color-grey-500);
+  --color-brand:           var(--color-moss-600);
+  --color-selected:        var(--color-moss-700); /* 4.2:1 on the moss-100 selected fill */
+
+  /* Interactive */
+  --color-action:          var(--color-moss-700); /* 4.82:1 with white */
+  --color-action-hover:    var(--color-moss-800); /* 7.33:1 with white */
+  --color-action-disabled: var(--color-moss-300);
+  --color-focus-ring:      var(--color-moss-600);
+
+  /* Feedback */
+  --color-danger:    var(--color-red-700);
+  --color-danger-bg: var(--color-red-50);
+  --color-notice:    var(--color-clay-700); /* 5.96:1 on white — scarcity notes, not alarm */
+
+  /* ============================================
+     Shape and type
+     ============================================ */
+
+  --radius-card: 18px;
+  --radius-sm:   12px;
+
+  --shadow-card:    0 1px 2px rgba(36, 41, 33, .05), 0 8px 20px rgba(36, 41, 33, .06);
+  --shadow-card-lg: 0 2px 4px rgba(36, 41, 33, .06), 0 14px 34px rgba(36, 41, 33, .10);
+
+  /* Headings and other display type. The fallback is a rounded system face,
+     not a serif — if Playpen Sans fails to load, the page should still feel
+     handmade rather than switch character entirely. */
+  --font-display: "Playpen Sans", "Chalkboard SE", "Comic Sans MS", "Segoe UI", sans-serif;
+  --font-sans:    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Height of the sticky action bar; body padding and scroll math read it. */
+  --spacing-bar: 76px;
+
+  /* Animations (keyframes live in base.css) */
+  --animate-rise: rise .28s ease both;
+  --animate-pop:  pop .38s cubic-bezier(.2, .9, .3, 1.4) both;
+}
