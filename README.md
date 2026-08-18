@@ -1,12 +1,12 @@
-# Handcrafted by Haze — order form (frontend)
+# Handcrafted by Haze — shop + admin
 
-A mobile-first, six-step order form for the Instagram bio link. Customers pick
-miniatures, leave their details, pay via GCash, and upload proof of payment.
+A mobile-first order form for the Instagram bio link, plus a private admin for
+running the shop. Customers pick miniatures, leave their details, pay via GCash,
+and upload proof of payment. Orders land in a database; you read them, check the
+receipt, and confirm in a DM.
 
-React 19 + Vite + TypeScript + Tailwind v4, built as a static SPA. The backend
-lives in a **separate repo** (Laravel); this app talks to it through one adapter
-interface, so it can also run against the original Google Sheet + Netlify Forms
-setup with no code change.
+React 19 + Vite + TypeScript + Tailwind v4. The backend is a **Laravel app in a
+separate repo**, which serves both the API and this SPA from one origin.
 
 ```bash
 npm install
@@ -18,143 +18,47 @@ npm run dev      # http://localhost:5173
 | `npm run dev` | Vite dev server |
 | `npm run build` | Typecheck, then build to `dist/` |
 | `npm run preview` | Serve the built `dist/` |
-| `npm test` | Vitest — CSV parsing, cart maths, validation, persistence |
+| `npm test` | Vitest — cart maths, validation, persistence, HTTP layer, auth gate |
 | `npm run lint:contrast` | Fails if a light palette step is used as text (see [Branding](#branding)) |
 
 ---
 
-## Two backends, one switch
+## How the pieces fit
 
-Everything that fetches or submits goes through `OrderSource` in
-`src/lib/api/types.ts`. There are two implementations:
+One origin. Laravel serves `/api/*` and the built SPA, with a catch-all returning
+`index.html` so `/admin/orders/5` survives a hard refresh.
 
-| `VITE_ORDER_BACKEND` | Products from | Orders to | Status |
-|---|---|---|---|
-| `sheet` *(default)* | Published Google Sheet CSV | Netlify Forms | The current live setup |
-| `laravel` | `GET {VITE_API_URL}/api/products` | `POST {VITE_API_URL}/api/orders` | Ready for the backend repo |
+```
+handcraftedbyhaze2   npm run build → dist/ → served by Laravel
 
-Switching is an environment variable in Netlify, not a code change. Copy
-`.env.example` to `.env` to configure locally.
+Laravel (one origin)
+  /api/products          public   the catalogue
+  /api/orders            public   order submit (multipart, carries the receipt)
+  /sanctum/csrf-cookie   session
+  /admin/login|logout    session
+  /api/admin/*           gated    orders, statuses, product CRUD
+  /*                     catch-all → index.html
+```
+
+Because it's one origin there is **no CORS to configure** and no API token: the
+admin session is an httpOnly cookie, which JS can't read, so an XSS bug can't
+walk off with it.
+
+### Deploying
 
 ```bash
-VITE_ORDER_BACKEND=sheet
-VITE_SHEET_CSV_URL=https://docs.google.com/…&output=csv
-VITE_API_URL=http://localhost:8000
+npm run build            # → dist/
+# copy dist/ into the Laravel app's public directory, however you deploy
 ```
 
-**If the product source can't be reached**, the page falls back to
-`src/lib/fallback-products.ts` and logs a warning, so the shop is never empty.
-Keep that list roughly current for exactly this reason.
-
-### Local submits
-
-With `sheet`, orders are **not** posted on localhost — Netlify Forms only exists
-on Netlify, so the adapter logs the payload and skips to the thank-you screen.
-With `laravel`, orders always post for real, because a local API is the normal
-way to develop against it.
+`VITE_API_URL` stays **blank** in production — every request is relative. Set it
+only to run `npm run dev` against Laravel on another port, which makes requests
+cross-origin, so that instance must then allow this origin *with credentials* or
+the session cookie won't survive.
 
 ---
 
-## The API contract
-
-What the Laravel repo needs to serve. Both endpoints must allow this site's
-origin via CORS.
-
-### `GET /api/products`
-
-Returns `{ "data": [...] }` (a bare array also works):
-
-```jsonc
-{
-  "id": "bunny",              // required, unique, never changes once orders exist
-  "name": "Bunny Buddy",      // falls back to id if empty
-  "price": 250,               // required, pesos, whole numbers
-  "image": "assets/bunny.jpg",// a path served from public/, or a full https:// URL
-  "description": "Palm-sized bunny with floppy ears.",
-  "available": true,          // false renders "Sold out" rather than hiding it
-  "stock": 3,                 // optional. "Only N left" at ≤3, sold out at 0
-  "max": 2,                   // optional. Cap per customer per order
-  "is_new": false             // optional. "New" badge; `isNew` also accepted
-}
-```
-
-A row with `stock: 0` is treated as sold out even if `available` is `true` — the
-frontend reconciles the contradiction rather than showing an unbuyable `+`.
-Rows with no `id` or an unusable `price` are dropped.
-
-### `POST /api/orders`
-
-`multipart/form-data` (there's a file), 2xx on success:
-
-| Field | Notes |
-|---|---|
-| `name` | |
-| `instagram` | No leading `@` |
-| `fulfillment` | `Meetup` or `Delivery` |
-| `address` | Empty string when `Meetup` |
-| `notes` | May be empty |
-| `items` | Human-readable lines: `2 × Bunny Buddy — ₱500\nSubtotal: ₱500` |
-| `subtotal` | A number, e.g. `500` — not `"₱500"` |
-| `reference` | GCash reference. Optional for the customer, so often empty |
-| `proof` | The receipt image. Max 5 MB, `image/*`, validated client-side too |
-
-**Stock is not decremented by this endpoint's caller.** The frontend never
-assumed it could, and the backend shouldn't infer it should: every GCash receipt
-is verified by hand before the order is confirmed in a DM, so decrementing on an
-unverified submission would let anyone zero out the shop with junk orders.
-Whatever the backend does here is a product decision, not a frontend one.
-
----
-
-## Managing products from a spreadsheet
-
-With `VITE_ORDER_BACKEND=sheet`, the catalogue is a published Google Sheet, so
-prices and stock change without a commit or a deploy — from a phone, even.
-
-Header row, lower case, exactly these names:
-
-| id | name | price | image | description | available | stock | max | new |
-|---|---|---|---|---|---|---|---|---|
-| bunny | Bunny Buddy | 250 | assets/bunny.jpg | Palm-sized bunny. | yes | | | |
-| bear | Sleepy Bear | 280 | assets/bear.jpg | Round little bear. | yes | 2 | | yes |
-
-Only **id**, **name**, and **price** are required; delete the other columns if
-you don't want them. `price` accepts `250`, `₱250`, and `1,250`.
-
-`new` is the one column that reads a blank cell as **no** — every other column
-treats "you didn't say" as yes. Nothing expires the badge, so clear the cell when
-a piece stops being new. A sold-out piece never shows it.
-
-To connect it: **File → Share → Publish to web**, pick the specific sheet (not
-"Entire document"), choose **CSV**, and put the link in `VITE_SHEET_CSV_URL`.
-
-Two things worth knowing: Google caches the published CSV, so edits usually
-appear within about five minutes; and the sheet is public to anyone with the
-link, so keep anything private in a different document — not just a different tab.
-
----
-
-## Deploying
-
-Netlify, building from this repo: command `npm run build`, publish `dist`.
-Both are already in `netlify.toml`. Set the `VITE_*` variables under
-**Site configuration → Environment variables**.
-
-### While on `sheet`: the hidden form
-
-`index.html` contains a hidden `<form name="order" data-netlify="true">`. That
-block is the only way Netlify learns which fields exist — Vite copies it into
-`dist/` verbatim. **If you add a field, add it there too**, and keep the names in
-sync with the `FormData` keys in `src/lib/api/sheet-netlify.ts`. A field missing
-from that form has its answers silently dropped.
-
-Turn on notifications under **Forms → Form notifications**, and after deploying,
-place one real order and check it appears under **Forms → order** *with the image
-attached*. That's the one thing that can't be tested locally.
-
----
-
-## How the flow works
+## The shop
 
 1. **Welcome** — what you make, lead time, meetup and delivery info
 2. **Products** — add pieces, adjust quantities, running total
@@ -169,6 +73,136 @@ both deliberate: a reload **never resumes past payment**, because the receipt fi
 can't survive it and a review screen listing a file that's gone would be a lie;
 and nothing is saved once the order is sent.
 
+There is no bundled fallback catalogue. There used to be, for when the Google
+Sheet was unreachable — but now that one origin serves both the API and
+`index.html`, an API that can't answer can't serve the page either, so a fallback
+could only ever show stale data during an outage it couldn't mask. The products
+step has real loading, empty, and error states instead.
+
+## The admin
+
+At `/admin`, behind a login.
+
+| Route | |
+|---|---|
+| `/admin/orders` | Inbox, newest first, with a count of unread ones |
+| `/admin/orders/:id` | Items, customer, receipt, and the status control |
+| `/admin/products` | Live pieces, and archived ones in their own section |
+| `/admin/products/:id` | Edit; `/admin/products/new` to add |
+
+Order statuses are `new → confirmed → fulfilled`, plus `cancelled`.
+
+Products are **archived, never deleted** — past orders still name them. An
+archived piece disappears from the shop and stays visible to you.
+
+### About `/admin`
+
+It is **not secret, and isn't treated as if it were.** Anyone can visit the URL
+and get a login screen, and its JavaScript chunk is downloadable. What keeps your
+data private is that every read and write is checked server-side against the
+session — never client-side hiding.
+
+What the split *does* buy is weight: the admin is a lazy-loaded chunk (~22 KB
+raw, ~7 KB gzipped) that a customer opening the shop never downloads.
+
+---
+
+## The API contract
+
+What the Laravel repo must serve.
+
+### `GET /api/products` — public
+
+Returns `{"data": [...]}` (a bare array also works). Only pieces that should
+appear in the shop — not archived ones.
+
+```jsonc
+{
+  "id": "bunny",              // required, unique, never changes once orders exist
+  "name": "Bunny Buddy",      // falls back to id if empty
+  "price": 250,               // required, pesos, whole numbers
+  "image": "/assets/bunny.jpg", // absolute URL, or a path on this origin
+  "description": "Palm-sized bunny with floppy ears.",
+  "available": true,          // false renders "Sold out" rather than hiding it
+  "stock": 3,                 // optional. "Only N left" at ≤3, sold out at 0
+  "max": 2,                   // optional. Cap per customer per order
+  "is_new": false             // optional. "New" badge; `isNew` also accepted
+}
+```
+
+A row with `stock: 0` is treated as sold out even if `available` is `true` — the
+frontend reconciles the contradiction rather than showing an unbuyable `+`. Rows
+with no `id` or an unusable `price` are dropped.
+
+### `POST /api/orders` — public
+
+`multipart/form-data`, 2xx on success. A 422 with an `errors` bag surfaces the
+first message to the customer; anything else shows generic copy.
+
+| Field | Notes |
+|---|---|
+| `name` | |
+| `instagram` | No leading `@` |
+| `fulfillment` | `Meetup` or `Delivery` |
+| `address` | Empty string when `Meetup` |
+| `notes` | May be empty |
+| `items` | Human-readable lines: `2 × Bunny Buddy — ₱500\nSubtotal: ₱500` |
+| `subtotal` | A number, e.g. `500` — not `"₱500"` |
+| `reference` | GCash reference. Optional for the customer, so often empty |
+| `proof` | The receipt image. Max 5 MB, `image/*`, validated client-side too |
+
+### Session
+
+- `GET /sanctum/csrf-cookie`
+- `POST /admin/login` ← `{email, password}` → `{"data": AdminUser}`
+- `POST /admin/logout`
+
+Return **401** for bad credentials or **422** with an `errors` bag — the login
+screen shows the same vague message either way, on purpose, so it can't be used
+to discover which accounts exist.
+
+### Gated — `auth:sanctum`
+
+| Endpoint | |
+|---|---|
+| `GET /api/admin/me` | `{"data": AdminUser}`, or 401 |
+| `GET /api/admin/orders` | Newest first |
+| `GET /api/admin/orders/{id}` | Adds `address`, `notes`, `items[]`, `receipt_url` |
+| `PATCH /api/admin/orders/{id}` | `{status}` |
+| *(whatever `receipt_url` points at)* | Streams the image, auth-gated |
+| `GET/POST /api/admin/products` | List / create |
+| `POST /api/admin/products/{id}` | Update, with `_method=PATCH` |
+| `DELETE /api/admin/products/{id}` | Archive |
+
+Order fields are accepted in `snake_case` (`customer_name`, `placed_at`,
+`item_count`, `unit_price`, `receipt_url`) or camelCase.
+
+The frontend never builds the receipt path itself — it renders whatever
+`receipt_url` the order detail returns, so you choose the route (something like
+`/api/admin/orders/{id}/receipt`). Whatever it is, **it must require the session**;
+returning a public storage URL here is the one mistake that leaks receipts.
+
+Product writes are multipart because they carry a photo, and updates are sent as
+`POST` with a `_method=PATCH` field — PHP does not parse a multipart body on a
+real `PATCH`. `stock` and `max` are sent as empty strings when not set, which
+means *"not tracking it"* and is deliberately distinct from `0`.
+
+### Three requirements that are expensive to retrofit
+
+1. **`order_items` snapshots `name` and `unit_price` at purchase time.** If order
+   lines point at live products, repricing a piece later silently rewrites what a
+   customer already paid.
+2. **Receipts live on a private disk**, streamed through the gated route above.
+   They show amounts, reference numbers, and partial account details — on the
+   public disk every customer's receipt is guessable by URL.
+3. **Archive products, never hard-delete them**, because orders reference them.
+
+Also on the backend: a one-off importer for the products that used to live in the
+Google Sheet, and a notification when an order lands — Netlify used to email you,
+and nothing does now.
+
+---
+
 ## Business rules baked into the page
 
 - Made to order, ready in **about a week** — stated on the welcome and done screens.
@@ -178,9 +212,10 @@ and nothing is saved once the order is sent.
   DM, so nobody has to guess shipping costs up front.
 - Confirmation always happens in an Instagram DM, never on the page.
 
-Wording lives in the step components under `src/steps/`. The validation messages
-in `src/lib/validate.ts` are written in the shop owner's voice on purpose — they
-aren't generic form copy, so don't replace them with "This field is required".
+Wording lives in the step components under `src/shop/steps/`. The validation
+messages in `src/lib/validate.ts` are written in the shop owner's voice on
+purpose — they aren't generic form copy, so don't replace them with "This field
+is required".
 
 ## Branding
 
@@ -189,14 +224,14 @@ Colors come from the Moss palette, defined in two layers in
 `@theme` *is* CSS custom properties, so those tokens are also the utility
 vocabulary — `bg-surface-brand`, `text-fg-muted`, `border-field`. Everything
 outside that file uses the semantic layer only, so retheming means editing one
-block.
+block. The admin reuses the same tokens.
 
 Two rules the palette enforces, worth knowing before you tweak anything:
 
 - **`--color-moss-500` (`#84B067`) is a fill, never text.** It's 2.5:1 on white,
   which fails contrast. Green text uses `moss-700` (`text-fg-brand`). Buttons are
   `moss-700` with white labels (4.82:1) — never white on the lighter green.
-  `npm run lint:contrast` fails the build if a light ramp step is used as text.
+  `npm run lint:contrast` fails if a light ramp step is used as text.
 - **Control outlines need 3:1.** Inputs, buttons, and radio cards use
   `border-field` (`grey-500`). Decorative rules use `border-rule` (`grey-300`),
   which is deliberately too faint for anything meaningful.
@@ -209,25 +244,39 @@ instantly while the display font loads.
 ## Files
 
 ```
-index.html              entry + the hidden form Netlify reads
+index.html            the entry Vite builds around
 src/
-  App.tsx               step routing, validation, submit
-  config.ts             shop details + which backend to use
-  steps/                one component per screen
-  components/           card, stepper, upload box, bars, fields
-  store/order.tsx       useReducer + Context, sessionStorage rules
+  routes.tsx          "/" → shop, "/admin/*" → lazy-loaded admin chunk
+  config.ts           shop details; API_URL
+  shop/               the customer flow
+    App.tsx           step routing, validation, submit
+    steps/            one component per screen
+    components/       card, stepper, upload box, bars, fields
+    store/order.tsx   useReducer + Context, sessionStorage rules
+  admin/              the private side (its own chunk)
+    AdminApp.tsx      routes + the auth gate
+    useAuth.tsx       session state; never holds a credential
+    Orders  OrderDetail  Products  ProductForm  Login
   lib/
-    api/types.ts        the contract the backend must satisfy
-    api/sheet-netlify.ts  Google Sheet + Netlify Forms
-    api/laravel.ts        the API in the backend repo
-    api/csv.ts          CSV parser for the published sheet
-    cart.ts             line items, totals, stock clamping
-    validate.ts         rules and their exact wording
-  styles/theme.css      the palette; edit this to retheme
-  styles/base.css       @font-face, keyframes, element defaults
-public/assets/          photos, GCash QR, favicon, font
+    api/http.ts       the only module that knows about transport
+    api/types.ts      the contract above
+    api/shop.ts       catalogue + order submit
+    api/admin.ts      session, orders, product CRUD
+    cart.ts           line items, totals, stock clamping
+    validate.ts       rules and their exact wording
+  styles/theme.css    the palette; edit this to retheme
+  styles/base.css     @font-face, keyframes, element defaults
+public/assets/        photos, GCash QR, favicon, font
 ```
 
-`public/assets/` is served as-is rather than bundled, on purpose: the Google
-Sheet's `image` column hardcodes those paths, and `index.html` preloads the font
-by its exact URL. Hashing them would break both.
+`public/assets/` is served as-is rather than bundled: `index.html` preloads the
+font by its exact URL, and product images referenced by path need stable ones.
+
+### Error handling
+
+`src/lib/api/http.ts` is the single place that maps status codes, so no component
+handles one: **401** signs out and bounces to login, **419** (expired CSRF)
+refreshes the cookie and retries once, **422** becomes per-field messages, and a
+network failure becomes a friendly line. Multipart requests deliberately set no
+`Content-Type` — the browser must write the boundary itself, or the upload
+silently fails.
