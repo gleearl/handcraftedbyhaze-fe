@@ -128,9 +128,10 @@ describe("sanitizeCart", () => {
     expect(sanitizeCart({ a: { id: "a", extras: [], qty: 0 } })).toEqual({});
   });
 
-  it("refuses a slot outside the three that exist", () => {
-    const cart = sanitizeCart({ a: { id: "a", extras: [0, 9, -1, 1.5], qty: 1 } });
-    expect(cart["a::0"]).toEqual({ id: "a", extras: [0], qty: 1 });
+  it("refuses a slot outside the ten that exist", () => {
+    const cart = sanitizeCart({ a: { id: "a", extras: [0, 9, 10, -1, 1.5], qty: 1 } });
+    // Nine is the last slot there is; ten, -1 and 1.5 are not slots at all.
+    expect(cart["a::0+9"]).toEqual({ id: "a", extras: [0, 9], qty: 1 });
   });
 
   it("merges two entries that normalise onto the same line", () => {

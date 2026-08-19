@@ -144,7 +144,7 @@ appear in the shop — not archived ones.
   "stock": 3,                 // optional. "Only N left" at ≤3, sold out at 0
   "max": 2,                   // optional. Cap per customer per order
   "is_new": false,            // optional. "New" badge; `isNew` also accepted
-  "addons": [                 // optional. Up to three extras, in slot order
+  "addons": [                 // optional. Up to ten extras, in slot order
     { "slot": 0, "name": "Gift box", "price": 50, "image": "/assets/box.jpg" }
   ]
 }
@@ -209,7 +209,7 @@ means *"not tracking it"* and is deliberately distinct from `0`.
 
 ## Add-ons
 
-A piece can be offered with up to three extras, each priced on its own — a
+A piece can be offered with up to ten extras, each priced on its own — a
 flower on a croissant, a gift box, a handwritten note. Give a piece any and its
 **+** becomes an **Add** button that opens a picker.
 

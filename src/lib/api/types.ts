@@ -8,9 +8,9 @@
 
 /** An extra a piece can be ordered with — a flower on a croissant, a gift box. */
 export interface Addon {
-  /* Which of the three slots this is. Carried rather than inferred from
-     position: a cart line keys its extras by slot, so emptying a middle slot
-     must not shift the later ones onto different numbers. */
+  /* Which slot this is. Carried rather than inferred from position: a cart
+     line keys its extras by slot, so emptying a middle slot must not shift the
+     later ones onto different numbers. */
   slot: number;
   name: string;
   /** Pesos, on top of the piece's own price. 0 renders as "Free". */
@@ -19,8 +19,8 @@ export interface Addon {
   image: string;
 }
 
-/** Three slots in the picker, three columns in the sheet. */
-export const MAX_ADDONS = 3;
+/** Ten slots at most: ten rows in the picker, ten sets of columns in the sheet. */
+export const MAX_ADDONS = 10;
 
 export interface Product {
   /** Unique, and never changes once orders exist. */

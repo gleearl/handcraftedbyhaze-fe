@@ -13,20 +13,25 @@ const EMPTY_ADDON: AddonInput = {
   name: "", price: null, photo: null, image: "", removePhoto: false,
 };
 
-/* Always three, always in slot order, blanks included. The slot a customer's
-   cart keys by is this row's position, so an empty one has to hold its place
-   rather than close up. */
-const emptyAddons = (): AddonInput[] =>
-  Array.from({ length: MAX_ADDONS }, () => ({ ...EMPTY_ADDON }));
+/* Rows are in slot order, blanks included: the slot a customer's cart keys by
+   is this row's position, so an empty one has to hold its place rather than
+   close up.
 
-/** Fill the gaps so every slot has a row, named or not. */
+   Only as far as the piece actually goes, though — the last slot in use plus
+   one blank to fill in next, and a button for the rest. Ten empty rows on
+   every piece would be a wall of fields for a shop where most pieces offer
+   one or two. */
 function addonsOf(product: Product | null): AddonInput[] {
-  const rows = emptyAddons();
+  const used = product?.addons.filter((a) => a.slot >= 0 && a.slot < MAX_ADDONS) ?? [];
+  const last = used.reduce((n, a) => Math.max(n, a.slot), -1);
 
-  product?.addons.forEach((a) => {
-    if (a.slot >= 0 && a.slot < MAX_ADDONS) {
-      rows[a.slot] = { name: a.name, price: a.price, photo: null, image: a.image, removePhoto: false };
-    }
+  const rows = Array.from(
+    { length: Math.min(last + 2, MAX_ADDONS) },
+    () => ({ ...EMPTY_ADDON }),
+  );
+
+  used.forEach((a) => {
+    rows[a.slot] = { name: a.name, price: a.price, photo: null, image: a.image, removePhoto: false };
   });
 
   return rows;
@@ -35,7 +40,7 @@ function addonsOf(product: Product | null): AddonInput[] {
 const EMPTY: ProductInput = {
   name: "", price: 0, description: "",
   available: true, stock: null, max: null, isNew: false, photo: null,
-  addons: emptyAddons(),
+  addons: addonsOf(null),
 };
 
 export function ProductForm() {
@@ -227,7 +232,7 @@ function Form({
         <fieldset className="mt-1 mb-5 border-0 p-0">
           <legend className="mb-1 font-display text-[1.0625rem] font-semibold">Extras</legend>
           <p className="mt-0 mb-3 text-[.8125rem] text-fg-muted">
-            Up to three things this piece can be ordered with — a flower, a gift box. Give it
+            Up to ten things this piece can be ordered with — a flower, a gift box. Give it
             any and its <b>+</b> becomes an <b>Add</b> button that asks first. Leave the name
             blank for a slot you're not using, and a blank price means free.
           </p>
@@ -244,6 +249,25 @@ function Form({
                 ))}
               />
             ))}
+          </div>
+
+          {/* A slot is only ever added on the end, never inserted: the number
+              is what a basket somebody has open keys its extras by, so the
+              ones already on the form have to keep theirs. */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
+            {form.addons.length < MAX_ADDONS && (
+              <Button
+                type="button" variant="ghost" size="sm"
+                onClick={() => set("addons", [...form.addons, { ...EMPTY_ADDON }])}
+              >
+                Add another extra
+              </Button>
+            )}
+            <span className="text-[.8125rem] text-fg-muted">
+              {form.addons.length === MAX_ADDONS
+                ? `All ${MAX_ADDONS} slots are on the form.`
+                : `${form.addons.length} of ${MAX_ADDONS} slots`}
+            </span>
           </div>
         </fieldset>
 
@@ -265,7 +289,7 @@ function Form({
 
 /* One slot. Kept on screen even when empty: the number is what a customer's
    cart keys its extras by, so slot 2 stays slot 2 whether or not slot 1 is
-   filled in — emptying the middle one must not shift the third up. */
+   filled in — emptying the middle one must not shift the later ones up. */
 function AddonFields({
   slot, addon, error, onChange,
 }: {
