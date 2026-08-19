@@ -1,4 +1,4 @@
-import { CONFIG } from "../../config";
+import { CONFIG, meetupPlace } from "../../config";
 import { Button, ButtonLink } from "../components/Button";
 import type { Fulfillment } from "../../lib/api/types";
 
@@ -31,7 +31,7 @@ export function Done({
         <li className="rounded-sm border border-rule bg-surface px-4 py-3.5 text-[.9375rem]">
           {fulfillment === "Meetup" ? (
             <>
-              <strong>Meetup.</strong> We'll agree on a time and spot at {CONFIG.meetupLocation}{" "}
+              <strong>Meetup.</strong> We'll agree on a time and spot at {meetupPlace()}{" "}
               once it's ready.
             </>
           ) : (

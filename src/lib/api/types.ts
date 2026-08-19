@@ -6,6 +6,22 @@
    the backend and frontend disagree. See README, "The API contract".
    ========================================================================== */
 
+/** An extra a piece can be ordered with — a flower on a croissant, a gift box. */
+export interface Addon {
+  /* Which of the three slots this is. Carried rather than inferred from
+     position: a cart line keys its extras by slot, so emptying a middle slot
+     must not shift the later ones onto different numbers. */
+  slot: number;
+  name: string;
+  /** Pesos, on top of the piece's own price. 0 renders as "Free". */
+  price: number;
+  /** Optional little photo. Empty string when there isn't one. */
+  image: string;
+}
+
+/** Three slots in the picker, three columns in the sheet. */
+export const MAX_ADDONS = 3;
+
 export interface Product {
   /** Unique, and never changes once orders exist. */
   id: string;
@@ -22,6 +38,9 @@ export interface Product {
   /** Most one customer may order in a single go. Undefined means no cap. */
   max?: number | undefined;
   isNew: boolean;
+  /* What this piece may be ordered with, in slot order — which is the order
+     the picker lists them. Empty means the + adds it straight away. */
+  addons: Addon[];
 }
 
 export type Fulfillment = "Meetup" | "Delivery";
@@ -53,7 +72,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export interface OrderItem {
   name: string;
   quantity: number;
+  /** Already includes the extras below — they itemise it, not add to it. */
   unitPrice: number;
+  addons: { name: string; price: number }[];
 }
 
 export interface OrderSummary {
@@ -93,6 +114,19 @@ export interface ProductInput {
   isNew: boolean;
   /** A newly chosen file, or null to leave the existing photo alone. */
   photo: File | null;
+  /* One entry per slot the form is showing. A blank name means the slot isn't
+     used, and the API drops it — which is how an extra is removed. */
+  addons: AddonInput[];
+}
+
+export interface AddonInput {
+  name: string;
+  /** Blank means free, which is deliberately distinct from unnamed. */
+  price: number | null;
+  photo: File | null;
+  /** The photo it already has, so the form can show and clear it. */
+  image: string;
+  removePhoto: boolean;
 }
 
 export interface AdminUser {

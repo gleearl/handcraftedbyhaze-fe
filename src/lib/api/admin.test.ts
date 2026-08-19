@@ -43,7 +43,9 @@ describe("order mapping", () => {
     }}));
 
     const order = await fetchOrder(7);
-    expect(order.items).toEqual([{ name: "Pink Croissant", quantity: 3, unitPrice: 150 }]);
+    expect(order.items).toEqual([
+      { name: "Pink Croissant", quantity: 3, unitPrice: 150, addons: [] },
+    ]);
     expect(order.receiptUrl).toBe("/api/admin/orders/7/receipt");
   });
 
@@ -64,7 +66,7 @@ describe("order mapping", () => {
 describe("product writes", () => {
   const input = {
     name: "Bunny", price: 250, description: "d",
-    available: true, stock: null, max: 2, isNew: true, photo: null,
+    available: true, stock: null, max: 2, isNew: true, photo: null, addons: [],
   };
 
   it("spoofs PATCH through POST, because PHP won't parse multipart on PATCH", async () => {
@@ -95,5 +97,36 @@ describe("product writes", () => {
   it("omits the photo field entirely when no new file was chosen", async () => {
     await updateProduct("bunny", input);
     expect((fetchMock.mock.calls.at(-1)![1].body as FormData).has("photo")).toBe(false);
+  });
+
+  it("indexes an extra by its slot, so a blank one holds its place", async () => {
+    /* A customer's cart keys its extras by slot. If the middle one were
+       dropped rather than sent blank, the third would arrive as slot 1 and
+       rename the extra in a basket somebody has open. */
+    await updateProduct("bunny", {
+      ...input,
+      addons: [
+        { name: "Pink flower", price: 40, photo: null, image: "", removePhoto: false },
+        { name: "", price: null, photo: null, image: "", removePhoto: false },
+        { name: "Gift box", price: 50, photo: null, image: "", removePhoto: false },
+      ],
+    });
+    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+
+    expect(body.get("addons[0][slot]")).toBe("0");
+    expect(body.get("addons[0][name]")).toBe("Pink flower");
+    expect(body.get("addons[1][name]")).toBe("");
+    expect(body.get("addons[2][slot]")).toBe("2");
+    expect(body.get("addons[2][name]")).toBe("Gift box");
+  });
+
+  it("sends a blank price for a free extra, distinct from not naming one", async () => {
+    await updateProduct("bunny", {
+      ...input,
+      addons: [{ name: "Handwritten note", price: null, photo: null, image: "", removePhoto: false }],
+    });
+    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+
+    expect(body.get("addons[0][price]")).toBe("");
   });
 });

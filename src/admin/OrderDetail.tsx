@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { fetchOrder, setOrderStatus } from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
 import { ORDER_STATUSES, type Order, type OrderStatus } from "../lib/api/types";
-import { CONFIG } from "../config";
+import { meetupPlace } from "../config";
 import { peso } from "../lib/format";
 import { useAsync } from "./useAsync";
 import { Loading, LoadError, Money, StatusPill } from "./components/ui";
@@ -45,7 +45,7 @@ function OrderView({ order, onChanged }: { order: Order; onChanged: () => void }
     ["Name", order.customerName],
     ["Instagram", "@" + order.instagram],
     ["Handover", order.fulfillment === "Meetup"
-      ? `Meetup · ${CONFIG.meetupLocation}`
+      ? `Meetup · ${meetupPlace()}`
       : "Delivery"],
   ];
   if (order.fulfillment === "Delivery" && order.address) rows.push(["Address", order.address]);
@@ -74,7 +74,16 @@ function OrderView({ order, onChanged }: { order: Order; onChanged: () => void }
         <div className="grid gap-2.5 text-[.9375rem]">
           {order.items.map((item, i) => (
             <div key={i} className="flex justify-between gap-3.5">
-              <span>{item.quantity} × {item.name}</span>
+              <span>
+                {item.quantity} × {item.name}
+                {/* What they chose, under the piece. unitPrice already
+                    includes these — they say what it's made of. */}
+                {item.addons.length > 0 && (
+                  <span className="block text-[.8125rem] text-fg-muted">
+                    {item.addons.map((a) => a.name).join(", ")}
+                  </span>
+                )}
+              </span>
               <span className="tabular-nums whitespace-nowrap">
                 {peso(item.unitPrice * item.quantity)}
               </span>

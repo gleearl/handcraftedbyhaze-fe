@@ -29,7 +29,7 @@ One origin. Laravel serves `/api/*` and the built SPA, with a catch-all returnin
 `index.html` so `/admin/orders/5` survives a hard refresh.
 
 ```
-handcraftedbyhaze2   npm run build → dist/ → served by Laravel
+handcraftedbyhaze-fe   npm run build → dist/ → served by Laravel
 
 Laravel (one origin)
   /api/products          public   the catalogue
@@ -61,7 +61,8 @@ the session cookie won't survive.
 ## The shop
 
 1. **Welcome** — what you make, lead time, meetup and delivery info
-2. **Products** — add pieces, adjust quantities, running total
+2. **Products** — add pieces, adjust quantities, running total. A piece that
+   offers extras opens a picker instead of adding straight away
 3. **Details** — name, IG handle, meetup or delivery (address only if delivery), notes
 4. **Payment** — GCash details, total to send, upload the receipt
 5. **Review** — a last look at everything
@@ -126,7 +127,10 @@ appear in the shop — not archived ones.
   "available": true,          // false renders "Sold out" rather than hiding it
   "stock": 3,                 // optional. "Only N left" at ≤3, sold out at 0
   "max": 2,                   // optional. Cap per customer per order
-  "is_new": false             // optional. "New" badge; `isNew` also accepted
+  "is_new": false,            // optional. "New" badge; `isNew` also accepted
+  "addons": [                 // optional. Up to three extras, in slot order
+    { "slot": 0, "name": "Gift box", "price": 50, "image": "/assets/box.jpg" }
+  ]
 }
 ```
 
@@ -146,7 +150,7 @@ first message to the customer; anything else shows generic copy.
 | `fulfillment` | `Meetup` or `Delivery` |
 | `address` | Empty string when `Meetup` |
 | `notes` | May be empty |
-| `items` | Human-readable lines: `2 × Bunny Buddy — ₱500\nSubtotal: ₱500` |
+| `items` | Human-readable lines: `2 × Bunny Buddy — ₱500\nSubtotal: ₱500`. Extras are indented under their piece — see [Add-ons](#add-ons) |
 | `subtotal` | A number, e.g. `500` — not `"₱500"` |
 | `reference` | GCash reference. Optional for the customer, so often empty |
 | `proof` | The receipt image. Max 5 MB, `image/*`, validated client-side too |
@@ -187,7 +191,48 @@ Product writes are multipart because they carry a photo, and updates are sent as
 real `PATCH`. `stock` and `max` are sent as empty strings when not set, which
 means *"not tracking it"* and is deliberately distinct from `0`.
 
-### Three requirements that are expensive to retrofit
+## Add-ons
+
+A piece can be offered with up to three extras, each priced on its own — a
+flower on a croissant, a gift box, a handwritten note. Give a piece any and its
+**+** becomes an **Add** button that opens a picker.
+
+**The picker lists "No add-on" first, already ticked**, so the default is a
+choice someone can see and point at rather than an empty state they have to
+work out. Ticking an extra clears it; clearing the last extra brings it back;
+it can't be turned off on its own. The confirm button carries the running
+per-piece price, so nobody meets the total for the first time at payment.
+
+**Prices are per piece.** Two croissants with a ₱50 box is ₱400, not ₱350.
+
+**One piece can be in an order more than once** — once plain, once with a
+flower — each its own row under the card with its own quantity. That's what the
+cart shape is for: an entry is keyed `"p-c"` or `"p-c::0+2"`, holding the
+*slots* chosen, never a name or a price, so a price edited in the admin
+reprices a cart already on screen.
+
+**Stock counts the piece, not the combination.** `stock: 1` is one croissant
+whether or not it's wearing a flower, so every row on a card runs out together.
+
+`slot` is what a line keys by, and the API sends it rather than leaving it to be
+inferred from position — emptying the middle slot must not shift the third onto
+a number some open basket already chose.
+
+Extras reach the API indented under their piece in `items`:
+
+```
+1 × Personalized Croissant — ₱255
+    + Pink flower (₱40)
+    + Handwritten note (Free)
+2 × Pink Flower Croissant — ₱300
+Subtotal: ₱555
+```
+
+The piece's line total already includes its extras — they itemise it rather
+than adding to it. A free one is written `(Free)`, which is what the picker
+showed.
+
+### Four requirements that are expensive to retrofit
 
 1. **`order_items` snapshots `name` and `unit_price` at purchase time.** If order
    lines point at live products, repricing a piece later silently rewrites what a
@@ -196,6 +241,9 @@ means *"not tracking it"* and is deliberately distinct from `0`.
    They show amounts, reference numbers, and partial account details — on the
    public disk every customer's receipt is guessable by URL.
 3. **Archive products, never hard-delete them**, because orders reference them.
+4. **An order line snapshots its chosen add-ons too** — name and price, exactly
+   like the piece itself. Renaming "Gift box" must not rewrite what somebody
+   already paid for one.
 
 Also on the backend: a one-off importer for the products that used to live in the
 Google Sheet, and a notification when an order lands — Netlify used to email you,
@@ -206,8 +254,10 @@ and nothing does now.
 ## Business rules baked into the page
 
 - Made to order, ready in **about a week** — stated on the welcome and done screens.
-- **Meetup at IT Park, Cebu City**, or **delivery with the courier fee shouldered
-  by the customer**.
+- **Meetup at IT Park or Cebu Business Park, Cebu City**, or **delivery with the
+  courier fee shouldered by the customer**. The spots live in `CONFIG.meetupSpots`
+  and `meetupPlace()` joins them — add or drop one freely, and every screen that
+  names the place follows.
 - Customers send the **item total only**. Delivery fees are quoted and settled in
   DM, so nobody has to guess shipping costs up front.
 - Confirmation always happens in an Instagram DM, never on the page.
@@ -251,7 +301,7 @@ src/
   shop/               the customer flow
     App.tsx           step routing, validation, submit
     steps/            one component per screen
-    components/       card, stepper, upload box, bars, fields
+    components/       card, stepper, upload box, bars, fields, add-on picker
     store/order.tsx   useReducer + Context, sessionStorage rules
   admin/              the private side (its own chunk)
     AdminApp.tsx      routes + the auth gate
@@ -262,7 +312,7 @@ src/
     api/types.ts      the contract above
     api/shop.ts       catalogue + order submit
     api/admin.ts      session, orders, product CRUD
-    cart.ts           line items, totals, stock clamping
+    cart.ts           line items, combinations, totals, stock clamping
     validate.ts       rules and their exact wording
   styles/theme.css    the palette; edit this to retheme
   styles/base.css     @font-face, keyframes, element defaults

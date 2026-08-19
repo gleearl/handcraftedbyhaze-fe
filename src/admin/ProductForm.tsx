@@ -2,16 +2,40 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { createProduct, fetchAdminProducts, updateProduct } from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
-import type { ProductInput } from "../lib/api/types";
+import { MAX_ADDONS, type AddonInput, type Product, type ProductInput } from "../lib/api/types";
 import { Button } from "../shop/components/Button";
 import { ErrorText } from "../shop/components/ErrorText";
 import { Field, INPUT, TEXTAREA } from "../shop/components/Field";
 import { useAsync } from "./useAsync";
 import { Loading, LoadError } from "./components/ui";
 
+const EMPTY_ADDON: AddonInput = {
+  name: "", price: null, photo: null, image: "", removePhoto: false,
+};
+
+/* Always three, always in slot order, blanks included. The slot a customer's
+   cart keys by is this row's position, so an empty one has to hold its place
+   rather than close up. */
+const emptyAddons = (): AddonInput[] =>
+  Array.from({ length: MAX_ADDONS }, () => ({ ...EMPTY_ADDON }));
+
+/** Fill the gaps so every slot has a row, named or not. */
+function addonsOf(product: Product | null): AddonInput[] {
+  const rows = emptyAddons();
+
+  product?.addons.forEach((a) => {
+    if (a.slot >= 0 && a.slot < MAX_ADDONS) {
+      rows[a.slot] = { name: a.name, price: a.price, photo: null, image: a.image, removePhoto: false };
+    }
+  });
+
+  return rows;
+}
+
 const EMPTY: ProductInput = {
   name: "", price: 0, description: "",
   available: true, stock: null, max: null, isNew: false, photo: null,
+  addons: emptyAddons(),
 };
 
 export function ProductForm() {
@@ -43,6 +67,7 @@ export function ProductForm() {
           max: existing.max ?? null,
           isNew: existing.isNew,
           photo: null,
+          addons: addonsOf(existing),
         }
       : EMPTY
   } currentImage={existing?.image ?? ""} />;
@@ -199,6 +224,29 @@ function Form({
           </div>
         </Field>
 
+        <fieldset className="mt-1 mb-5 border-0 p-0">
+          <legend className="mb-1 font-display text-[1.0625rem] font-semibold">Extras</legend>
+          <p className="mt-0 mb-3 text-[.8125rem] text-fg-muted">
+            Up to three things this piece can be ordered with — a flower, a gift box. Give it
+            any and its <b>+</b> becomes an <b>Add</b> button that asks first. Leave the name
+            blank for a slot you're not using, and a blank price means free.
+          </p>
+
+          <div className="grid gap-2.5">
+            {form.addons.map((addon, slot) => (
+              <AddonFields
+                key={slot}
+                slot={slot}
+                addon={addon}
+                error={fieldErrors[`addons.${slot}.name`] ?? fieldErrors[`addons.${slot}.price`]}
+                onChange={(patch) => set("addons", form.addons.map(
+                  (a, i) => (i === slot ? { ...a, ...patch } : a),
+                ))}
+              />
+            ))}
+          </div>
+        </fieldset>
+
         <ErrorText>{formError}</ErrorText>
 
         <div className="mt-2 flex gap-2.5">
@@ -212,6 +260,72 @@ function Form({
         </div>
       </form>
     </>
+  );
+}
+
+/* One slot. Kept on screen even when empty: the number is what a customer's
+   cart keys its extras by, so slot 2 stays slot 2 whether or not slot 1 is
+   filled in — emptying the middle one must not shift the third up. */
+function AddonFields({
+  slot, addon, error, onChange,
+}: {
+  slot: number; addon: AddonInput; error?: string;
+  onChange: (patch: Partial<AddonInput>) => void;
+}) {
+  const shown = addon.photo ? URL.createObjectURL(addon.photo)
+    : addon.removePhoto ? "" : addon.image;
+
+  return (
+    <div className="rounded-sm border border-rule bg-surface-brand-soft/40 p-3">
+      <div className="flex flex-wrap items-end gap-2.5">
+        <label className="min-w-0 flex-1 text-[.8125rem]">
+          <span className="mb-1 block text-fg-muted">Extra {slot + 1}</span>
+          <input
+            type="text" value={addon.name} placeholder="Not used"
+            onChange={(e) => onChange({ name: e.target.value })}
+            className={INPUT}
+          />
+        </label>
+        <label className="w-28 text-[.8125rem]">
+          <span className="mb-1 block text-fg-muted">Adds (₱)</span>
+          <input
+            type="number" inputMode="numeric" min={0} value={addon.price ?? ""}
+            placeholder="Free"
+            onChange={(e) => {
+              const n = Math.floor(Number(e.target.value.trim()));
+              onChange({ price: e.target.value.trim() === "" || !Number.isFinite(n) || n < 0 ? null : n });
+            }}
+            className={INPUT}
+          />
+        </label>
+      </div>
+
+      {/* Only worth asking about once the slot is actually in use. */}
+      {addon.name.trim() !== "" && (
+        <div className="mt-2.5 flex items-center gap-2.5">
+          {shown && (
+            <img src={shown} alt=""
+                 className="size-10 flex-none rounded-xs bg-surface object-cover" />
+          )}
+          <input
+            type="file" accept="image/*"
+            onChange={(e) => onChange({ photo: e.target.files?.[0] ?? null, removePhoto: false })}
+            className="min-w-0 flex-1 text-xs"
+          />
+          {shown && !addon.photo && (
+            <button
+              type="button"
+              onClick={() => onChange({ removePhoto: true })}
+              className="shrink-0 cursor-pointer text-xs text-fg-muted underline"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && <ErrorText>{error}</ErrorText>}
+    </div>
   );
 }
 

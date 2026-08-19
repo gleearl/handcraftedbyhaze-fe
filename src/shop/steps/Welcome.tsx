@@ -1,9 +1,9 @@
-import { CONFIG } from "../../config";
+import { CONFIG, meetupPlace } from "../../config";
 import { Button } from "../components/Button";
 
 const CHIPS = [
   ["🕒", `Made to order · ready in ${CONFIG.leadTime}`],
-  ["📍", `Meetup at ${CONFIG.meetupLocation}`],
+  ["📍", `Meetup at ${meetupPlace()}`],
   ["📦", "Delivery available · fee shouldered by you"],
 ] as const;
 

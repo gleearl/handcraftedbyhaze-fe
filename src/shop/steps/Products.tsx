@@ -1,10 +1,14 @@
+import { AddonPicker } from "../components/AddonPicker";
 import { ProductCard } from "../components/ProductCard";
 import { ErrorText } from "../components/ErrorText";
 import { Button } from "../components/Button";
+import { extrasFromKey, productById, qtyOfProduct } from "../../lib/cart";
 import { useOrder } from "../store/order";
 
 export function Products({ error }: { error: string | null }) {
-  const { state, dispatch, reloadCatalogue } = useOrder();
+  const { state, dispatch, reloadCatalogue, lines } = useOrder();
+  const picking = state.picking;
+  const pickingProduct = picking ? productById(state.products, picking.id) : undefined;
 
   return (
     <section aria-labelledby="products-title" className="animate-rise">
@@ -50,8 +54,10 @@ export function Products({ error }: { error: string | null }) {
             <ProductCard
               key={p.id}
               product={p}
-              qty={state.cart[p.id] || 0}
-              onAdjust={(act) => dispatch({ type: "adjust", id: p.id, act })}
+              lines={lines.filter((l) => l.id === p.id)}
+              qty={qtyOfProduct(state.cart, p.id)}
+              onAdjust={(key, act) => dispatch({ type: "adjust", id: p.id, key, act })}
+              onPick={(key) => dispatch({ type: "openPicker", id: p.id, key })}
               focusAct={state.focusRequest?.id === p.id ? state.focusRequest.act : null}
               onFocusHandled={() => dispatch({ type: "focusHandled" })}
             />
@@ -60,6 +66,19 @@ export function Products({ error }: { error: string | null }) {
       )}
 
       <ErrorText>{error}</ErrorText>
+
+      {pickingProduct && picking && (
+        <AddonPicker
+          /* Keyed so reopening on a different row starts from that row's
+             extras rather than the ones the panel last held. */
+          key={picking.id + "|" + picking.key}
+          product={pickingProduct}
+          chosen={picking.key ? (state.cart[picking.key]?.extras ?? extrasFromKey(picking.key)) : []}
+          editing={picking.key !== ""}
+          onConfirm={(extras) => dispatch({ type: "commitPick", extras })}
+          onClose={() => dispatch({ type: "closePicker" })}
+        />
+      )}
     </section>
   );
 }

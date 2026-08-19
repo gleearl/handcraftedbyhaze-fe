@@ -1,26 +1,88 @@
-import type { Product } from "./api/types";
+import { MAX_ADDONS, type Addon, type Product } from "./api/types";
 import { peso } from "./format";
 
-export type Cart = Record<string, number>;
+/* ==========================================================================
+   The cart.
+
+   A line is a product *plus the extras chosen for it*, so the same piece can
+   sit in an order twice — once as it is, once with a flower. The key encodes
+   that set: "n-sc" plain, "n-sc::0+2" with the first and third add-on.
+
+   What's stored is the slot, never the name or the price. Everything about a
+   piece is re-read from the live catalogue when lines are built, so a price
+   edited in the admin reprices a cart already on screen.
+   ========================================================================== */
+
+/** What's kept: which piece, which slots, how many. Never a name or a price. */
+export interface CartEntry {
+  id: string;
+  /** Slot indices into the product's `addons`, ascending. */
+  extras: number[];
+  qty: number;
+}
+
+export type Cart = Record<string, CartEntry>;
 
 export interface CartLine extends Product {
+  /** The cart key this line came from. */
+  key: string;
+  /** The extras actually chosen — not `product.addons`, which is what's offered. */
+  extras: Addon[];
   qty: number;
-  /** price × qty */
+  /** One of this combination: the piece plus its extras. */
+  unit: number;
+  /** unit × qty */
   line: number;
 }
+
+export function lineKeyFor(id: string, extras: number[]): string {
+  return extras.length
+    ? id + "::" + [...extras].sort((a, b) => a - b).join("+")
+    : id;
+}
+
+export function extrasFromKey(key: string): number[] {
+  const at = key.indexOf("::");
+  if (at < 0) return [];
+  return key.slice(at + 2).split("+").map(Number).filter(Number.isInteger);
+}
+
+export const hasAddons = (p: Product): boolean => p.addons.length > 0;
 
 export const productById = (products: Product[], id: string): Product | undefined =>
   products.find((p) => p.id === id);
 
+/* Stock counts the piece, not the combination: one croissant is one croissant
+   whether or not it's wearing a flower. */
+export const qtyOfProduct = (cart: Cart, id: string): number =>
+  Object.values(cart).reduce((n, l) => n + (l.id === id ? l.qty : 0), 0);
+
 export function cartLines(cart: Cart, products: Product[]): CartLine[] {
   return Object.keys(cart)
-    .filter((id) => cart[id] > 0 && productById(products, id))
-    .map((id) => {
-      const p = productById(products, id)!;
-      const qty = cart[id];
-      return { ...p, qty, line: p.price * qty };
-    });
+    .map((key): CartLine | null => {
+      const entry = cart[key];
+      const p = entry && entry.qty > 0 ? productById(products, entry.id) : undefined;
+      if (!p) return null;
+
+      /* By slot, not by position — a slot emptied in the admin mid-session
+         simply stops being an extra, and the ones after it keep their numbers
+         rather than sliding onto somebody else's. */
+      const extras = entry.extras
+        .map((slot) => p.addons.find((a) => a.slot === slot))
+        .filter((a): a is Addon => a !== undefined);
+      const unit = p.price + extras.reduce((n, a) => n + a.price, 0);
+
+      // `extras` after the spread on purpose: p.addons is what's *offered*,
+      // entry.extras is what was *chosen*, and only the second belongs here.
+      return { ...p, key, extras, qty: entry.qty, unit, line: unit * entry.qty };
+    })
+    .filter((l): l is CartLine => l !== null);
 }
+
+/* The same words the picker uses for the same thing — a cart row saying one
+   thing and the panel that made it saying another is a puzzle nobody needs. */
+export const extrasLabel = (extras: Addon[]): string =>
+  extras.length ? "With " + extras.map((a) => a.name).join(" + ") : "No add-on";
 
 export const cartCount = (lines: CartLine[]): number =>
   lines.reduce((n, l) => n + l.qty, 0);
@@ -34,31 +96,80 @@ export function limitFor(p: Product): number {
   return caps.length ? Math.min(...caps) : Infinity;
 }
 
-/* Trim a restored cart down to what's actually orderable now: someone may have
-   5 saved from yesterday against a stock the owner has since dropped to 2.
-   Returns a new cart, and whether anything changed. */
+/* sessionStorage is the customer's to edit, and a cart shape with more in it
+   than a number is more to get wrong. Rebuild it rather than trusting it:
+   anything unrecognisable is dropped, and two entries that normalise onto the
+   same key merge instead of one silently winning. */
+export function sanitizeCart(raw: unknown): Cart {
+  const out: Cart = {};
+  if (!raw || typeof raw !== "object") return out;
+
+  Object.values(raw as Record<string, unknown>).forEach((value) => {
+    const entry = value as Partial<CartEntry> | null;
+    if (!entry || typeof entry !== "object" || typeof entry.id !== "string") return;
+
+    const qty = Math.floor(Number(entry.qty));
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    /* Sorted, because the key is: an entry whose extras disagree with its own
+       key would list them in a different order than an identical line built
+       any other way. Ascending is the one order everything here assumes. */
+    const extras = Array.isArray(entry.extras)
+      ? [...new Set(entry.extras.filter(
+          (i): i is number => Number.isInteger(i) && i >= 0 && i < MAX_ADDONS,
+        ))].sort((a, b) => a - b)
+      : [];
+
+    const key = lineKeyFor(entry.id, extras);
+    if (out[key]) out[key].qty += qty;
+    else out[key] = { id: entry.id, extras, qty };
+  });
+
+  return out;
+}
+
+/* Trim a restored cart down to what's actually orderable now. Rebuilt rather
+   than edited in place, because three things can happen at once here: a piece
+   goes away, an extra goes away, and what's left has to fit under a stock
+   number that counts the piece rather than the combination. */
 export function clampCartToStock(
   cart: Cart,
   products: Product[],
 ): { cart: Cart; trimmed: boolean } {
-  const next: Cart = { ...cart };
+  const next: Cart = {};
+  const used: Record<string, number> = {};
   let trimmed = false;
 
-  Object.keys(next).forEach((id) => {
-    const p = productById(products, id);
-    const limit = p && p.available ? limitFor(p) : 0;
-    if (next[id] <= limit) return;
+  Object.keys(cart).forEach((key) => {
+    const entry = cart[key];
+    const p = productById(products, entry.id);
+    if (!p || !p.available) { trimmed = true; return; }
 
-    trimmed = true;
-    if (limit > 0) next[id] = limit;
-    else delete next[id];
+    const extras = entry.extras.filter((slot) => p.addons.some((a) => a.slot === slot));
+    if (extras.length !== entry.extras.length) trimmed = true;
+
+    const qty = Math.min(entry.qty, limitFor(p) - (used[p.id] ?? 0));
+    if (qty <= 0) { trimmed = true; return; }
+    if (qty !== entry.qty) trimmed = true;
+
+    // Losing an extra can land this line on one that's already here — two rows
+    // both reading "No add-on" would be a puzzle, so they become one.
+    const k = lineKeyFor(p.id, extras);
+    if (next[k]) { next[k].qty += qty; trimmed = true; }
+    else next[k] = { id: p.id, extras, qty };
+
+    used[p.id] = (used[p.id] ?? 0) + qty;
   });
 
   return { cart: trimmed ? next : cart, trimmed };
 }
 
-/** Human-readable line items for the order record. */
+/* What lands in the order record. Extras are indented under their piece rather
+   than run onto the end of the line, because this is read on a phone while
+   someone checks a GCash receipt, and the pieces are what's being counted. */
 export function itemsAsText(lines: CartLine[], total: number): string {
-  return lines.map((l) => `${l.qty} × ${l.name} — ${peso(l.line)}`).join("\n")
-    + `\nSubtotal: ${peso(total)}`;
+  return lines.map((l) =>
+    `${l.qty} × ${l.name} — ${peso(l.line)}`
+    + l.extras.map((a) => `\n    + ${a.name} (${a.price > 0 ? peso(a.price) : "Free"})`).join("")
+  ).join("\n") + `\nSubtotal: ${peso(total)}`;
 }

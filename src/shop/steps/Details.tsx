@@ -1,4 +1,4 @@
-import { CONFIG } from "../../config";
+import { meetupPlace } from "../../config";
 import { Field, FieldSet, RadioOption, INPUT, TEXTAREA } from "../components/Field";
 import { Callout } from "../components/Card";
 import { useOrder } from "../store/order";
@@ -57,7 +57,7 @@ export function Details({ invalid }: { invalid: Invalid | null }) {
       <FieldSet legend="How would you like to get it?" error={errFor("fulfillment")}>
         <RadioOption
           id="f-meetup" name="fulfillment" value="Meetup"
-          title="Meetup" sub={`${CONFIG.meetupLocation} · free`}
+          title="Meetup" sub={`${meetupPlace()} · free`}
           checked={d.fulfillment === "Meetup"}
           onChange={() => set({ fulfillment: "Meetup" })}
         />
@@ -71,7 +71,7 @@ export function Details({ invalid }: { invalid: Invalid | null }) {
 
       {d.fulfillment === "Meetup" && (
         <Callout>
-          We'll agree on the exact spot and time at {CONFIG.meetupLocation} over DM
+          We'll agree on the exact spot and time at {meetupPlace()} over DM
           once your piece is ready.
         </Callout>
       )}

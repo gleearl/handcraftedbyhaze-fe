@@ -5,13 +5,41 @@
 
 import { request } from "./http";
 import { normalizeImage } from "./image";
-import type { OrderPayload, Product } from "./types";
+import { MAX_ADDONS, type Addon, type OrderPayload, type Product } from "./types";
 
 const num = (v: unknown): number | undefined => {
   if (v === null || v === undefined || v === "") return undefined;
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
+
+/* Kept in the order the API sent them, which is slot order. Each carries its
+   own slot, so dropping an unusable one here can't renumber the rest — a cart
+   keys its extras by slot, not by where they happen to sit in this list. */
+function toAddons(raw: unknown): Addon[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((value, i) => {
+    const a = (value ?? {}) as Record<string, unknown>;
+    const price = Math.round(Number(a.price));
+    const slot = Math.floor(Number(a.slot));
+
+    return {
+      // Falling back to position keeps an API that doesn't send slots working.
+      slot: Number.isInteger(slot) && slot >= 0 ? slot : i,
+      name: String(a.name ?? "").trim(),
+      // A blank or unreadable price is a free extra, which is a real thing to
+      // want — "add a handwritten note" costs nothing.
+      price: Number.isFinite(price) && price > 0 ? price : 0,
+      image: normalizeImage(String(a.image ?? "")),
+    };
+  })
+    // An unnamed slot isn't something anyone can choose, and two extras on the
+    // same slot would make a cart key ambiguous.
+    .filter((a, i, all) => a.name !== "" && a.slot < MAX_ADDONS
+      && all.findIndex((b) => b.slot === a.slot) === i)
+    .slice(0, MAX_ADDONS);
+}
 
 /* The API owns its own truth about availability, but a row saying stock 0 and
    available true is a contradiction the UI shouldn't have to reconcile. */
@@ -33,6 +61,7 @@ export function toProduct(raw: Record<string, unknown>): Product | null {
     max: num(raw.max),
     // Accept both spellings so the backend can use either convention.
     isNew: raw.is_new === true || raw.isNew === true,
+    addons: toAddons(raw.addons),
   };
 }
 

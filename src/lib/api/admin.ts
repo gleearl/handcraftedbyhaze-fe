@@ -69,10 +69,20 @@ export async function fetchOrder(id: number, signal?: AbortSignal): Promise<Orde
     notes: String(r.notes ?? ""),
     items: rawItems.map((i) => {
       const item = i as Record<string, unknown>;
+      const addons = Array.isArray(item.addons) ? item.addons : [];
+
       return {
         name: String(item.name ?? ""),
         quantity: Number(item.quantity ?? 0),
+        // Already includes the extras below — they itemise it, not add to it.
         unitPrice: Math.round(Number(item.unit_price ?? item.unitPrice ?? 0)),
+        addons: addons.map((a) => {
+          const addon = (a ?? {}) as Record<string, unknown>;
+          return {
+            name: String(addon.name ?? ""),
+            price: Math.round(Number(addon.price ?? 0)) || 0,
+          };
+        }),
       };
     }),
     receiptUrl: r.receipt_url || r.receiptUrl
@@ -112,6 +122,18 @@ function toFormData(input: ProductInput, method?: "PATCH"): FormData {
   data.append("stock", input.stock === null ? "" : String(input.stock));
   data.append("max", input.max === null ? "" : String(input.max));
   if (input.photo) data.append("photo", input.photo, input.photo.name);
+
+  /* Indexed by slot, not by position in the form: the cart keys a chosen
+     combination by slot, so slot 2 has to stay slot 2 even when slot 1 is
+     blank. An unnamed slot is sent anyway and dropped server-side, which is
+     how an extra is removed. */
+  input.addons.forEach((addon, slot) => {
+    data.append(`addons[${slot}][slot]`, String(slot));
+    data.append(`addons[${slot}][name]`, addon.name.trim());
+    data.append(`addons[${slot}][price]`, addon.price === null ? "" : String(addon.price));
+    if (addon.photo) data.append(`addons[${slot}][photo]`, addon.photo, addon.photo.name);
+    if (addon.removePhoto) data.append(`addons[${slot}][remove_photo]`, "1");
+  });
   // PHP doesn't parse a multipart body on PATCH, so Laravel reads this instead.
   if (method) data.append("_method", method);
   return data;

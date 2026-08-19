@@ -12,14 +12,18 @@ import {
 import { fetchProducts } from "../../lib/api/shop";
 import type { Fulfillment, Product } from "../../lib/api/types";
 import {
-  cartCount as countOf, cartLines, clampCartToStock, limitFor, productById,
+  cartCount as countOf, cartLines, clampCartToStock, extrasFromKey, limitFor,
+  lineKeyFor, productById, qtyOfProduct, sanitizeCart,
   subtotal as subtotalOf, type Cart, type CartLine,
 } from "../../lib/cart";
 
 export const STEPS = ["welcome", "products", "details", "payment", "review", "done"] as const;
 export type StepName = (typeof STEPS)[number];
 
-const STORAGE_KEY = "hbh-order-v1";
+/* v2: a cart was { id: qty } until add-ons made a line a piece *plus its
+   extras*. A v1 cart can't be read into the new shape, and half-reading one is
+   worse than dropping it. */
+const STORAGE_KEY = "hbh-order-v2";
 export const PROGRESS_STEPS = 4; // products → details → payment → review
 
 /** Never resume past payment: the proof file is gone after a reload. */
@@ -49,12 +53,18 @@ interface State {
      to render all three of these rather than always having something to show. */
   catalogue: "loading" | "ready" | "error";
   /** Set after a stepper press so the card can put focus somewhere sensible. */
-  focusRequest: { id: string; act: "inc" | "dec" } | null;
+  focusRequest: { id: string; key: string; act: "inc" | "dec" | "pick" } | null;
+  /* Which piece's add-on panel is open, and the line being edited — an empty
+     key means a new line rather than a change to one already in the order. */
+  picking: { id: string; key: string } | null;
 }
 
 type Action =
   | { type: "goTo"; index: number }
-  | { type: "adjust"; id: string; act: "inc" | "dec" }
+  | { type: "adjust"; id: string; key: string; act: "inc" | "dec" }
+  | { type: "openPicker"; id: string; key: string }
+  | { type: "closePicker" }
+  | { type: "commitPick"; extras: number[] }
   | { type: "setDetails"; patch: Partial<Details> }
   | { type: "setProof"; file: File | null }
   | { type: "setProducts"; products: Product[] }
@@ -72,6 +82,7 @@ const initialState: State = {
   products: [],
   catalogue: "loading",
   focusRequest: null,
+  picking: null,
 };
 
 function reducer(state: State, action: Action): State {
@@ -83,16 +94,73 @@ function reducer(state: State, action: Action): State {
       const p = productById(state.products, action.id);
       if (!p) return state;
 
-      const current = state.cart[action.id] || 0;
-      const next = action.act === "inc"
-        ? Math.min(current + 1, limitFor(p))   // Infinity when nothing caps it
-        : Math.max(0, current - 1);
+      const cart = { ...state.cart };
+      const entry = cart[action.key];
+      const focusRequest = { id: action.id, key: action.key, act: action.act };
+
+      if (action.act === "inc") {
+        // The cap is the piece's, so every row on a card runs out together.
+        if (qtyOfProduct(cart, action.id) >= limitFor(p)) return state;
+
+        cart[action.key] = entry
+          ? { ...entry, qty: entry.qty + 1 }
+          // A piece with no extras has one line, keyed by the product id alone.
+          : { id: action.id, extras: extrasFromKey(action.key), qty: 1 };
+      } else {
+        if (!entry) return state;
+        if (entry.qty <= 1) delete cart[action.key];
+        else cart[action.key] = { ...entry, qty: entry.qty - 1 };
+      }
+
+      return { ...state, cart, focusRequest };
+    }
+
+    case "openPicker": {
+      const p = productById(state.products, action.id);
+      if (!p) return state;
+
+      // Nothing to open for a piece that's already at its limit — unless this
+      // is an edit, which changes a line rather than adding one.
+      if (!action.key && qtyOfProduct(state.cart, action.id) >= limitFor(p)) return state;
+
+      return { ...state, picking: { id: action.id, key: action.key } };
+    }
+
+    case "closePicker":
+      return { ...state, picking: null };
+
+    case "commitPick": {
+      const picking = state.picking;
+      if (!picking) return state;
+
+      const p = productById(state.products, picking.id);
+      if (!p) return { ...state, picking: null };
 
       const cart = { ...state.cart };
-      if (next === 0) delete cart[action.id];
-      else cart[action.id] = next;
+      const nextKey = lineKeyFor(picking.id, action.extras);
 
-      return { ...state, cart, focusRequest: { id: action.id, act: action.act } };
+      if (!picking.key) {
+        if (qtyOfProduct(cart, picking.id) >= limitFor(p)) return { ...state, picking: null };
+        cart[nextKey] = cart[nextKey]
+          ? { ...cart[nextKey], qty: cart[nextKey].qty + 1 }
+          : { id: picking.id, extras: action.extras, qty: 1 };
+      } else if (nextKey !== picking.key) {
+        const moving = cart[picking.key];
+        if (moving) {
+          delete cart[picking.key];
+          // Edited onto a combination already in the order — the two become one.
+          cart[nextKey] = cart[nextKey]
+            ? { ...cart[nextKey], qty: cart[nextKey].qty + moving.qty }
+            : { id: picking.id, extras: action.extras, qty: moving.qty };
+        }
+      }
+
+      return {
+        ...state, cart, picking: null,
+        // The button that opened the panel has been re-rendered away, so say
+        // where focus goes rather than letting <dialog> guess.
+        focusRequest: { id: picking.id, key: nextKey, act: "pick" },
+      };
     }
 
     case "setDetails":
@@ -151,9 +219,9 @@ function readSaved(): Saved | null {
     const parsed = JSON.parse(raw) as Partial<Saved> | null;
     if (!parsed) return null;
 
-    const cart = parsed.cart && typeof parsed.cart === "object" ? parsed.cart : {};
     return {
-      cart,
+      // Rebuilt rather than trusted: sessionStorage is the customer's to edit.
+      cart: sanitizeCart(parsed.cart),
       details: { ...EMPTY_DETAILS, ...(parsed.details ?? {}) },
       step: typeof parsed.step === "number" ? parsed.step : 0,
     };
@@ -187,7 +255,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     if (!saved) return init;
 
     // Only resume into a later step if there's actually a cart to resume.
-    const hasCart = Object.values(saved.cart).some((q) => q > 0);
+    const hasCart = Object.values(saved.cart).some((l) => l.qty > 0);
     return {
       ...init,
       cart: saved.cart,

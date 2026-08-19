@@ -23,7 +23,19 @@ export function ItemRows({ lines, subtotal }: { lines: CartLine[]; subtotal: num
   return (
     <Summary>
       {lines.map((l) => (
-        <AmountRow key={l.id} label={`${l.qty} × ${l.name}`} value={peso(l.line)} />
+        <div key={l.key} className="flex justify-between gap-3.5">
+          <span className="min-w-0">
+            {l.qty} × {l.name}
+            {/* Under the piece rather than run onto the end of it: the pieces
+                are what's being counted, the extras are what they're wearing. */}
+            {l.extras.length > 0 && (
+              <span className="block text-[.8125rem] text-fg-muted">
+                with {l.extras.map((a) => a.name).join(", ")}
+              </span>
+            )}
+          </span>
+          <span className="tabular-nums whitespace-nowrap">{peso(l.line)}</span>
+        </div>
       ))}
       <AmountRow label="Total to send" value={peso(subtotal)} total />
     </Summary>

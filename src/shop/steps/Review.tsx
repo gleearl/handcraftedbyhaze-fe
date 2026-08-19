@@ -1,4 +1,4 @@
-import { CONFIG } from "../../config";
+import { meetupPlace } from "../../config";
 import { Card } from "../components/Card";
 import { ErrorText } from "../components/ErrorText";
 import { ItemRows, DetailRows } from "../components/Summary";
@@ -11,7 +11,7 @@ export function Review({ error }: { error: string | null }) {
   const rows: [string, string][] = [
     ["Name", d.name],
     ["Instagram", "@" + d.instagram],
-    ["Handover", d.fulfillment === "Meetup" ? `Meetup · ${CONFIG.meetupLocation}` : "Delivery"],
+    ["Handover", d.fulfillment === "Meetup" ? `Meetup · ${meetupPlace()}` : "Delivery"],
   ];
   if (d.fulfillment === "Delivery") rows.push(["Address", d.address]);
   if (d.notes) rows.push(["Notes", d.notes]);
