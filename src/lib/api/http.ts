@@ -1,9 +1,12 @@
 /* ==========================================================================
    The only module that knows about transport.
 
-   Laravel serves both the API and this SPA from one origin, so there is no
-   CORS here and no bearer token: the session rides on an httpOnly cookie the
-   JS can't read, which is the point — an XSS bug can't walk off with it.
+   The shop is served from handcraftedbyhaze.com and the API from
+   api.handcraftedbyhaze.com — two origins, but one *site*, which is the part
+   that matters: the session rides on an httpOnly cookie scoped to
+   .handcraftedbyhaze.com, so the browser still counts it as first-party and
+   nothing blocks it. JS can't read it either, which is the point — an XSS bug
+   can't walk off with it.
 
    Everything a component might otherwise handle by status code lives here:
    401 bounces to login, 419 refreshes CSRF and retries once, 422 becomes
@@ -41,7 +44,7 @@ function csrfToken(): string {
 let csrfPrimed = false;
 
 export async function primeCsrf(): Promise<void> {
-  await fetch(`${API_URL}/sanctum/csrf-cookie`, { credentials: "same-origin" });
+  await fetch(`${API_URL}/sanctum/csrf-cookie`, { credentials: "include" });
   csrfPrimed = true;
 }
 
@@ -90,7 +93,10 @@ async function send(path: string, options: Options): Promise<Response> {
 
   return fetch(`${API_URL}${path}`, {
     method,
-    credentials: "same-origin",
+    /* "include", not "same-origin": the API is on another origin now, and
+       same-origin means the cookie is simply never sent — which looks like a
+       200 login followed by a 401 on everything after it. */
+    credentials: "include",
     headers,
     ...(body !== undefined ? { body: isForm ? body : JSON.stringify(body) } : {}),
     ...(signal ? { signal } : {}),

@@ -5,8 +5,9 @@ running the shop. Customers pick miniatures, leave their details, pay via GCash,
 and upload proof of payment. Orders land in a database; you read them, check the
 receipt, and confirm in a DM.
 
-React 19 + Vite + TypeScript + Tailwind v4. The backend is a **Laravel app in a
-separate repo**, which serves both the API and this SPA from one origin.
+React 19 + Vite + TypeScript + Tailwind v4. This deploys to GitHub Pages at
+**handcraftedbyhaze.com**; the API is a **Laravel app in a separate repo** at
+**api.handcraftedbyhaze.com**.
 
 ```bash
 npm install
@@ -25,36 +26,51 @@ npm run dev      # http://localhost:5173
 
 ## How the pieces fit
 
-One origin. Laravel serves `/api/*` and the built SPA, with a catch-all returning
-`index.html` so `/admin/orders/5` survives a hard refresh.
+Two origins, one site:
 
 ```
-handcraftedbyhaze-fe   npm run build → dist/ → served by Laravel
+handcraftedbyhaze-fe       npm run build → dist/ → GitHub Pages
+                           https://handcraftedbyhaze.com
 
-Laravel (one origin)
-  /api/products          public   the catalogue
-  /api/orders            public   order submit (multipart, carries the receipt)
-  /sanctum/csrf-cookie   session
-  /admin/login|logout    session
-  /api/admin/*           gated    orders, statuses, product CRUD
-  /*                     catch-all → index.html
+handcraftedbyhaze-laravel  https://api.handcraftedbyhaze.com
+  /api/products            public   the catalogue
+  /api/orders              public   order submit (multipart, carries the receipt)
+  /sanctum/csrf-cookie     session
+  /admin/login|logout      session
+  /api/admin/*             gated    orders, statuses, product CRUD
 ```
 
-Because it's one origin there is **no CORS to configure** and no API token: the
-admin session is an httpOnly cookie, which JS can't read, so an XSS bug can't
-walk off with it.
+**Different origins, the same *site*, and that distinction is doing real work.**
+The admin session is an httpOnly cookie, which JS can't read — so an XSS bug
+can't walk off with it. That only survives a split because both hosts are under
+`handcraftedbyhaze.com` and the cookie is scoped to `.handcraftedbyhaze.com`,
+which keeps the browser treating it as first-party. Host the shop on a different
+registrable domain — `*.github.io`, say — and Safari blocks the cookie outright:
+the login returns 200 and everything after it returns 401.
+
+Two consequences worth knowing before changing anything in `src/lib/api/`:
+
+- **Requests use `credentials: "include"`**, not `"same-origin"`. The latter
+  silently sends no cookie at all across origins.
+- **`normalizeImage` prefixes `API_URL`.** A product photo or a receipt comes
+  back as `/storage/…` or `/api/admin/…`, which is relative *to the API*. Left
+  bare it would resolve against the shop and 404.
+
+`VITE_API_URL` lives in `.env.production`, which is committed on purpose — it's
+a public URL, and without it in CI the build ships pointing at nowhere.
 
 ### Deploying
 
-```bash
-npm run build            # → dist/
-# copy dist/ into the Laravel app's public directory, however you deploy
-```
+Push to `main` and `.github/workflows/pages.yml` runs the tests, builds, and
+publishes to Pages. `public/CNAME` is what holds the custom domain.
 
-`VITE_API_URL` stays **blank** in production — every request is relative. Set it
-only to run `npm run dev` against Laravel on another port, which makes requests
-cross-origin, so that instance must then allow this origin *with credentials* or
-the session cookie won't survive.
+Pages serves a file or it 404s — it has no SPA fallback — so the build copies
+`index.html` to `404.html`. That's what lets `/admin/orders/5` survive a hard
+refresh: Pages hands back the app shell and React Router reads the URL.
+
+For local work against a local API, set `VITE_API_URL=http://localhost:8000` in
+`.env` and run `npm run dev`. That API must allow this origin with credentials —
+its `FRONTEND_URL` does that.
 
 ---
 

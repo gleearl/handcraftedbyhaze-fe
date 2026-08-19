@@ -5,4 +5,7 @@ dist/
 .env
 .env.*
 !.env.example
+# Not a secret — the public origin of the API, and CI has to have it or the
+# build ships with a blank one and every request lands on the wrong host.
+!.env.production
 *.tsbuildinfo

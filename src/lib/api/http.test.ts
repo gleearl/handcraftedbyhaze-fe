@@ -39,7 +39,9 @@ describe("request", () => {
   it("sends credentials so the session cookie rides along", async () => {
     fetchMock.mockResolvedValueOnce(json({}));
     await request("/api/products");
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "same-origin" });
+    // "include", because the API is a different origin — "same-origin" would
+    // quietly drop the cookie and every gated call would 401.
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include" });
   });
 
   it("never sets Content-Type on FormData, so the browser writes the boundary", async () => {
