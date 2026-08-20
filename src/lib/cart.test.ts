@@ -244,6 +244,17 @@ describe("clampCartToStock", () => {
     expect(trimmed).toBe(true);
     expect(next).toEqual({ a: { id: "a", extras: [], qty: 3 } });
   });
+
+  it("keeps the extras a piece still offers", () => {
+    /* Matched by library id. This filtered on a per-product slot once, and an
+       Addon has no slot any more — left that way it silently stripped every
+       extra from every line and repriced the basket down on restore. */
+    const p = make({ id: "a", stock: 5, addons: [addon(7, "Gift box", 50)] });
+    const { cart, trimmed } = clampCartToStock(one("a", [7]), [p]);
+
+    expect(Object.values(cart)[0]?.extras).toEqual([7]);
+    expect(trimmed).toBe(false);
+  });
 });
 
 describe("extras a piece includes for free", () => {

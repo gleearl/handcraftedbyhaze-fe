@@ -189,7 +189,7 @@ export function clampCartToStock(
     const p = productById(products, entry.id);
     if (!p || !p.available) { trimmed = true; return; }
 
-    const extras = entry.extras.filter((slot) => p.addons.some((a) => a.slot === slot));
+    const extras = entry.extras.filter((id) => p.addons.some((a) => a.id === id));
     if (extras.length !== entry.extras.length) trimmed = true;
 
     const qty = Math.min(entry.qty, limitFor(p) - (used[p.id] ?? 0));
