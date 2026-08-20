@@ -7,7 +7,8 @@ import { primeCsrf, request } from "./http";
 import { normalizeImage } from "./image";
 import { toProduct, unwrap } from "./shop";
 import type {
-  AdminProduct, AdminUser, Order, OrderStatus, OrderSummary, ProductInput, Settings,
+  AddonFormInput, AdminProduct, AdminUser, LibraryAddon, Order, OrderStatus, OrderSummary,
+  ProductInput, Settings,
 } from "./types";
 
 /* ── Session ───────────────────────────────────────────────────────────── */
@@ -124,17 +125,11 @@ function toFormData(input: ProductInput, method?: "PATCH"): FormData {
   data.append("free_addons", String(input.freeAddons));
   if (input.photo) data.append("photo", input.photo, input.photo.name);
 
-  /* Two different numbers, and the difference is the whole design. The index
-     is where the extra is shown, so the order these go out in is the order the
-     owner arranged. The slot inside is which extra it *is* — a cart keys a
-     chosen combination by it, so it travels with the row rather than being
-     read off its position. An extra is removed by not being sent. */
-  input.addons.forEach((addon, position) => {
-    data.append(`addons[${position}][slot]`, String(addon.slot));
-    data.append(`addons[${position}][name]`, addon.name.trim());
-    data.append(`addons[${position}][price]`, addon.price === null ? "" : String(addon.price));
-    if (addon.photo) data.append(`addons[${position}][photo]`, addon.photo, addon.photo.name);
-    if (addon.removePhoto) data.append(`addons[${position}][remove_photo]`, "1");
+  /* The ids the piece offers, in the order to show them. The index is where the
+     extra sits — that is the owner's arrangement — and the value is which extra
+     it is. An extra is taken off by not being sent; it stays in the library. */
+  input.addons.forEach((id, position) => {
+    data.append(`addons[${position}]`, String(id));
   });
   // PHP doesn't parse a multipart body on PATCH, so Laravel reads this instead.
   if (method) data.append("_method", method);
@@ -174,6 +169,75 @@ export async function archiveProduct(id: string): Promise<void> {
  */
 export async function restoreProduct(id: string): Promise<void> {
   await request<unknown>(`/api/admin/products/${id}/restore`, { method: "POST" });
+}
+
+/* ── The library of extras ─────────────────────────────────────────────── */
+
+const toLibraryAddon = (r: Record<string, unknown>): LibraryAddon => ({
+  id: Math.floor(Number(r.id)),
+  name: String(r.name ?? ""),
+  price: Math.round(Number(r.price ?? 0)) || 0,
+  image: normalizeImage(String(r.image ?? "")),
+  // Accept both spellings so the backend can use either convention.
+  usedOn: Array.isArray(r.used_on ?? r.usedOn) ? ((r.used_on ?? r.usedOn) as unknown[]).map(String) : [],
+});
+
+const unwrapOne = (body: unknown): Record<string, unknown> =>
+  (((body as { data?: unknown })?.data ?? body) ?? {}) as Record<string, unknown>;
+
+export async function fetchLibrary(signal?: AbortSignal): Promise<LibraryAddon[]> {
+  const body = await request<unknown>("/api/admin/addons", signal ? { signal } : {});
+  return unwrap(body).map((r) => toLibraryAddon(r as Record<string, unknown>));
+}
+
+/* Multipart even when no photo changed, for the same reason a product is: the
+   form carries a file field, and one shape always is simpler than branching. */
+function addonFormData(input: AddonFormInput, method?: "PATCH"): FormData {
+  const data = new FormData();
+  data.append("name", input.name.trim());
+  // Blank, not "0": the server reads an empty field as free.
+  data.append("price", input.price === null ? "" : String(input.price));
+  if (input.photo) data.append("photo", input.photo, input.photo.name);
+  if (input.removePhoto) data.append("remove_photo", "1");
+  // PHP doesn't parse a multipart body on PATCH, so Laravel reads this instead.
+  if (method) data.append("_method", method);
+  return data;
+}
+
+export async function createAddon(input: AddonFormInput): Promise<LibraryAddon> {
+  return toLibraryAddon(unwrapOne(await request<unknown>("/api/admin/addons", {
+    method: "POST", body: addonFormData(input),
+  })));
+}
+
+export async function updateAddon(id: number, input: AddonFormInput): Promise<LibraryAddon> {
+  return toLibraryAddon(unwrapOne(await request<unknown>(`/api/admin/addons/${id}`, {
+    method: "POST",              // spoofed to PATCH by _method
+    body: addonFormData(input, "PATCH"),
+  })));
+}
+
+/**
+ * A real delete, unlike a product's archive. Past orders snapshot the extras
+ * they were bought with and point at nothing here, so there is no history to
+ * keep — but it comes off every piece offering it, which is why the screen
+ * asks first and says how many.
+ */
+export async function deleteAddon(id: number): Promise<void> {
+  await request<unknown>(`/api/admin/addons/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Which pieces offer this extra — the apply-to-many action.
+ *
+ * The whole list every time; a piece is unticked by not being sent. A newly
+ * ticked one takes the place after the extras it already has, so this never
+ * rearranges an arrangement somebody made on the product form.
+ */
+export async function setAddonProducts(id: number, productIds: string[]): Promise<LibraryAddon> {
+  return toLibraryAddon(unwrapOne(await request<unknown>(`/api/admin/addons/${id}/products`, {
+    method: "PUT", body: { products: productIds },
+  })));
 }
 
 /* ── Settings ──────────────────────────────────────────────────────────── */

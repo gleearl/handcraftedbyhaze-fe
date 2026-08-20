@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  fetchOrder, fetchOrders, fetchSettings, saveSettings, sendTestEmail, setOrderStatus, updateProduct,
+  createAddon, createProduct, fetchLibrary, fetchOrder, fetchOrders, fetchSettings, saveSettings,
+  sendTestEmail, setAddonProducts, setOrderStatus, updateAddon, updateProduct,
 } from "./admin";
 import { ApiError } from "./http";
 
@@ -103,45 +104,55 @@ describe("product writes", () => {
     expect((fetchMock.mock.calls.at(-1)![1].body as FormData).has("photo")).toBe(false);
   });
 
-  it("sends each extra's own slot, whatever order it sits in", async () => {
-    /* The index is where it's shown; the slot inside is which extra it is. A
-       customer's basket is keyed by the slot, so dragging the gift box to the
-       top must not hand it the flower's number. */
-    await updateProduct("bunny", {
-      ...input,
-      addons: [
-        { slot: 2, name: "Gift box", price: 50, photo: null, image: "", removePhoto: false },
-        { slot: 0, name: "Pink flower", price: 40, photo: null, image: "", removePhoto: false },
-      ],
+});
+
+describe("the product form's extras", () => {
+  it("sends the ids in order, the index being the position", async () => {
+    await createProduct({
+      name: "Croissant", price: 175, description: "", available: true, stock: null,
+      max: null, freeAddons: 0, isNew: false, photo: null, addons: [9, 3],
     });
     const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
 
-    expect(body.get("addons[0][slot]")).toBe("2");
-    expect(body.get("addons[0][name]")).toBe("Gift box");
-    expect(body.get("addons[1][slot]")).toBe("0");
-    expect(body.get("addons[1][name]")).toBe("Pink flower");
+    expect(body.get("addons[0]")).toBe("9");
+    expect(body.get("addons[1]")).toBe("3");
+  });
+});
+
+describe("the library", () => {
+  it("reads used_on into usedOn", async () => {
+    fetchMock.mockResolvedValueOnce(json({
+      data: [{ id: 7, name: "Gift box", price: 150, image: "", used_on: ["croissant"] }],
+    }));
+
+    const [entry] = await fetchLibrary();
+
+    expect(entry).toMatchObject({ id: 7, name: "Gift box", price: 150, usedOn: ["croissant"] });
   });
 
-  it("sends nothing at all for an extra that was removed", async () => {
-    // Not being sent is how a slot is deleted server-side.
-    await updateProduct("bunny", {
-      ...input,
-      addons: [{ slot: 1, name: "Gift box", price: 50, photo: null, image: "", removePhoto: false }],
-    });
-    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+  it("sends a blank price as an empty field, so the server reads it as free", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 1, name: "Note", price: 0, image: "", used_on: [] } }));
 
-    expect(body.get("addons[0][slot]")).toBe("1");
-    expect(body.get("addons[1][slot]")).toBeNull();
+    await createAddon({ name: "Note", price: null, photo: null, image: "", removePhoto: false });
+
+    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+    expect(body.get("price")).toBe("");
   });
 
-  it("sends a blank price for a free extra, distinct from not naming one", async () => {
-    await updateProduct("bunny", {
-      ...input,
-      addons: [{ slot: 0, name: "Handwritten note", price: null, photo: null, image: "", removePhoto: false }],
-    });
-    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+  it("spoofs PATCH on an update, because a photo means multipart", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 7, name: "Gift box", price: 175, image: "", used_on: [] } }));
 
-    expect(body.get("addons[0][price]")).toBe("");
+    await updateAddon(7, { name: "Gift box", price: 175, photo: null, image: "", removePhoto: false });
+
+    expect((fetchMock.mock.calls.at(-1)![1].body as FormData).get("_method")).toBe("PATCH");
+  });
+
+  it("sends the whole list of pieces, so unticking is just not sending one", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 7, name: "Gift box", price: 150, image: "", used_on: ["bunny"] } }));
+
+    const entry = await setAddonProducts(7, ["bunny"]);
+
+    expect(entry.usedOn).toEqual(["bunny"]);
   });
 });
 
