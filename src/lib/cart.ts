@@ -6,17 +6,17 @@ import { peso } from "./format";
 
    A line is a product *plus the extras chosen for it*, so the same piece can
    sit in an order twice — once as it is, once with a flower. The key encodes
-   that set: "n-sc" plain, "n-sc::0+2" with the first and third add-on.
+   that set: "n-sc" plain, "n-sc::3+9" with two of the library's extras.
 
-   What's stored is the slot, never the name or the price. Everything about a
-   piece is re-read from the live catalogue when lines are built, so a price
-   edited in the admin reprices a cart already on screen.
+   What's stored is the extra's library id, never the name or the price.
+   Everything about a piece is re-read from the live catalogue when lines are
+   built, so a price edited in the admin reprices a cart already on screen.
    ========================================================================== */
 
-/** What's kept: which piece, which slots, how many. Never a name or a price. */
+/** What's kept: which piece, which extras, how many. Never a name or a price. */
 export interface CartEntry {
   id: string;
-  /** Slot indices into the product's `addons`, ascending. */
+  /** Library ids of the extras chosen, ascending. */
   extras: number[];
   qty: number;
 }
@@ -99,14 +99,14 @@ export function cartLines(cart: Cart, products: Product[]): CartLine[] {
       const p = entry && entry.qty > 0 ? productById(products, entry.id) : undefined;
       if (!p) return null;
 
-      /* Matched by slot, never by position — a slot emptied in the admin
-         mid-session simply stops being an extra, and the ones left keep their
-         own numbers rather than sliding onto somebody else's.
+      /* Matched by the library id, never by position — an extra the owner has
+         taken off this piece simply stops being one, and the rest keep their
+         own ids rather than sliding onto somebody else's.
 
          Listed in the catalogue's order rather than the cart's, so a row reads
-         in the order the picker offered it. What's stored stays sorted by slot
+         in the order the picker offered it. What's stored stays sorted by id
          either way: that's what the line's key is built from. */
-      const extras = p.addons.filter((a) => entry.extras.includes(a.slot));
+      const extras = p.addons.filter((a) => entry.extras.includes(a.id));
       const priced = priceExtras(extras, p.freeAddons);
       const unit = p.price + priced.reduce((n, e) => n + e.charged, 0);
 
@@ -151,11 +151,17 @@ export function sanitizeCart(raw: unknown): Cart {
 
     /* Sorted, because the key is: an entry whose extras disagree with its own
        key would list them in a different order than an identical line built
-       any other way. Ascending is the one order everything here assumes. */
+       any other way. Ascending is the one order everything here assumes.
+
+       Bounded by *how many*, not by how big. These are library ids, and a shop
+       that has ever had more than twenty extras issues ids past twenty — the
+       slot bound this replaced would have quietly emptied those baskets. An id
+       nothing offers any more is harmless: cartLines drops what it can't
+       match, and the line simply reprices. */
     const extras = Array.isArray(entry.extras)
       ? [...new Set(entry.extras.filter(
-          (i): i is number => Number.isInteger(i) && i >= 0 && i < MAX_ADDONS,
-        ))].sort((a, b) => a - b)
+          (i): i is number => Number.isInteger(i) && i > 0,
+        ))].sort((a, b) => a - b).slice(0, MAX_ADDONS)
       : [];
 
     const key = lineKeyFor(entry.id, extras);

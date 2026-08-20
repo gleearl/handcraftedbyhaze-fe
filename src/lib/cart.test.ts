@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Addon, Product } from "./api/types";
+import { MAX_ADDONS, type Addon, type Product } from "./api/types";
 import {
   cartCount, cartLines, clampCartToStock, extrasFromKey, extrasLabel, itemsAsText,
   limitFor, lineKeyFor, priceExtras, qtyOfProduct, sanitizeCart, subtotal, type Cart,
@@ -10,8 +10,8 @@ const make = (over: Partial<Product> & { id: string }): Product => ({
   available: true, isNew: false, freeAddons: 0, addons: [], ...over,
 });
 
-const addon = (slot: number, name: string, price: number): Addon =>
-  ({ slot, name, price, image: "" });
+const addon = (id: number, name: string, price: number): Addon =>
+  ({ id, name, price, image: "" });
 
 /** One of a combination, so a test reads as the cart it describes. */
 const one = (id: string, extras: number[] = [], qty = 1): Cart =>
@@ -143,19 +143,56 @@ describe("sanitizeCart", () => {
     expect(sanitizeCart({ a: { id: "a", extras: [], qty: 0 } })).toEqual({});
   });
 
-  it("refuses a slot outside the ten that exist", () => {
-    const cart = sanitizeCart({ a: { id: "a", extras: [0, 9, 10, -1, 1.5], qty: 1 } });
-    // Nine is the last slot there is; ten, -1 and 1.5 are not slots at all.
-    expect(cart["a::0+9"]).toEqual({ id: "a", extras: [0, 9], qty: 1 });
+  it("keeps ids well past the number of extras a piece may offer", () => {
+    /* The bound here used to be the slot bound, `i < MAX_ADDONS`. A library id
+       is not a slot and has no upper limit, and reusing that bound would throw
+       away every extra in a shop that has ever had more than twenty. */
+    const cart = sanitizeCart({ "a::4207": { id: "a", extras: [4207], qty: 1 } });
+
+    expect(cart["a::4207"]?.extras).toEqual([4207]);
+  });
+
+  it("drops more extras than a piece could ever offer", () => {
+    const tooMany = Array.from({ length: MAX_ADDONS + 1 }, (_, i) => i + 1);
+    const cart = sanitizeCart({ x: { id: "a", extras: tooMany, qty: 1 } });
+
+    expect(Object.values(cart)[0]?.extras).toHaveLength(MAX_ADDONS);
+  });
+
+  it("drops an id that isn't a positive whole number", () => {
+    const cart = sanitizeCart({ x: { id: "a", extras: [0, -3, 1.5, 7], qty: 1 } });
+
+    expect(Object.values(cart)[0]?.extras).toEqual([7]);
   });
 
   it("merges two entries that normalise onto the same line", () => {
     // Rather than letting one silently win.
     const cart = sanitizeCart({
-      x: { id: "a", extras: [1, 0], qty: 1 },
-      y: { id: "a", extras: [0, 1], qty: 2 },
+      x: { id: "a", extras: [2, 1], qty: 1 },
+      y: { id: "a", extras: [1, 2], qty: 2 },
     });
-    expect(cart).toEqual({ "a::0+1": { id: "a", extras: [0, 1], qty: 3 } });
+    expect(cart).toEqual({ "a::1+2": { id: "a", extras: [1, 2], qty: 3 } });
+  });
+});
+
+describe("cartLines with a library", () => {
+  it("drops an extra the piece no longer offers and reprices the line", () => {
+    const p = make({ id: "a", price: 100, addons: [addon(7, "Gift box", 50)] });
+    // 12 was ticked when the basket was made and has since been unticked.
+    const lines = cartLines(one("a", [7, 12]), [p]);
+
+    expect(lines[0]?.extras.map((e) => e.id)).toEqual([7]);
+    expect(lines[0]?.unit).toBe(150);
+  });
+
+  it("shows extras in the catalogue's order, not the order they were ticked", () => {
+    const p = make({
+      id: "a",
+      addons: [addon(9, "Gift box", 50), addon(3, "Pink flower", 20)],
+    });
+
+    expect(cartLines(one("a", [3, 9]), [p])[0]?.extras.map((e) => e.name))
+      .toEqual(["Gift box", "Pink flower"]);
   });
 });
 
