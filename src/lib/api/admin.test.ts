@@ -66,7 +66,8 @@ describe("order mapping", () => {
 describe("product writes", () => {
   const input = {
     name: "Bunny", price: 250, description: "d",
-    available: true, stock: null, max: 2, isNew: true, photo: null, addons: [],
+    available: true, stock: null, max: 2, freeAddons: 0,
+    isNew: true, photo: null, addons: [],
   };
 
   it("spoofs PATCH through POST, because PHP won't parse multipart on PATCH", async () => {
@@ -99,31 +100,41 @@ describe("product writes", () => {
     expect((fetchMock.mock.calls.at(-1)![1].body as FormData).has("photo")).toBe(false);
   });
 
-  it("indexes an extra by its slot, so a blank one holds its place", async () => {
-    /* A customer's cart keys its extras by slot. If the middle one were
-       dropped rather than sent blank, the third would arrive as slot 1 and
-       rename the extra in a basket somebody has open. */
+  it("sends each extra's own slot, whatever order it sits in", async () => {
+    /* The index is where it's shown; the slot inside is which extra it is. A
+       customer's basket is keyed by the slot, so dragging the gift box to the
+       top must not hand it the flower's number. */
     await updateProduct("bunny", {
       ...input,
       addons: [
-        { name: "Pink flower", price: 40, photo: null, image: "", removePhoto: false },
-        { name: "", price: null, photo: null, image: "", removePhoto: false },
-        { name: "Gift box", price: 50, photo: null, image: "", removePhoto: false },
+        { slot: 2, name: "Gift box", price: 50, photo: null, image: "", removePhoto: false },
+        { slot: 0, name: "Pink flower", price: 40, photo: null, image: "", removePhoto: false },
       ],
     });
     const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
 
-    expect(body.get("addons[0][slot]")).toBe("0");
-    expect(body.get("addons[0][name]")).toBe("Pink flower");
-    expect(body.get("addons[1][name]")).toBe("");
-    expect(body.get("addons[2][slot]")).toBe("2");
-    expect(body.get("addons[2][name]")).toBe("Gift box");
+    expect(body.get("addons[0][slot]")).toBe("2");
+    expect(body.get("addons[0][name]")).toBe("Gift box");
+    expect(body.get("addons[1][slot]")).toBe("0");
+    expect(body.get("addons[1][name]")).toBe("Pink flower");
+  });
+
+  it("sends nothing at all for an extra that was removed", async () => {
+    // Not being sent is how a slot is deleted server-side.
+    await updateProduct("bunny", {
+      ...input,
+      addons: [{ slot: 1, name: "Gift box", price: 50, photo: null, image: "", removePhoto: false }],
+    });
+    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+
+    expect(body.get("addons[0][slot]")).toBe("1");
+    expect(body.get("addons[1][slot]")).toBeNull();
   });
 
   it("sends a blank price for a free extra, distinct from not naming one", async () => {
     await updateProduct("bunny", {
       ...input,
-      addons: [{ name: "Handwritten note", price: null, photo: null, image: "", removePhoto: false }],
+      addons: [{ slot: 0, name: "Handwritten note", price: null, photo: null, image: "", removePhoto: false }],
     });
     const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
 

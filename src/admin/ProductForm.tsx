@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { createProduct, fetchAdminProducts, updateProduct } from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
@@ -9,37 +9,43 @@ import { Field, INPUT, TEXTAREA } from "../shop/components/Field";
 import { useAsync } from "./useAsync";
 import { Loading, LoadError } from "./components/ui";
 
-const EMPTY_ADDON: AddonInput = {
-  name: "", price: null, photo: null, image: "", removePhoto: false,
-};
+const emptyAddon = (slot: number): AddonInput => ({
+  slot, name: "", price: null, photo: null, image: "", removePhoto: false,
+});
 
-/* Rows are in slot order, blanks included: the slot a customer's cart keys by
-   is this row's position, so an empty one has to hold its place rather than
-   close up.
-
-   Only as far as the piece actually goes, though — the last slot in use plus
-   one blank to fill in next, and a button for the rest. Ten empty rows on
-   every piece would be a wall of fields for a shop where most pieces offer
-   one or two. */
+/* One row per extra the piece actually has, in the order the API sent them —
+   which is the order the owner arranged. No blank placeholders: a row carries
+   its own slot now, so nothing has to hold a place in the list to keep its
+   number. */
 function addonsOf(product: Product | null): AddonInput[] {
-  const used = product?.addons.filter((a) => a.slot >= 0 && a.slot < MAX_ADDONS) ?? [];
-  const last = used.reduce((n, a) => Math.max(n, a.slot), -1);
+  return (product?.addons ?? [])
+    .filter((a) => a.slot >= 0 && a.slot < MAX_ADDONS)
+    .map((a) => ({
+      slot: a.slot, name: a.name, price: a.price,
+      photo: null, image: a.image, removePhoto: false,
+    }));
+}
 
-  const rows = Array.from(
-    { length: Math.min(last + 2, MAX_ADDONS) },
-    () => ({ ...EMPTY_ADDON }),
-  );
+/* The lowest number nobody is using. Reusing a freed slot is safe — the extra
+   that had it is gone from the catalogue, so a basket still holding it drops
+   it on the next read rather than picking up the newcomer's name. */
+function freeSlot(rows: AddonInput[]): number {
+  const taken = new Set(rows.map((r) => r.slot));
+  for (let n = 0; n < MAX_ADDONS; n++) if (!taken.has(n)) return n;
+  return -1;
+}
 
-  used.forEach((a) => {
-    rows[a.slot] = { name: a.name, price: a.price, photo: null, image: a.image, removePhoto: false };
-  });
-
-  return rows;
+/** Move one row to another index, keeping every slot exactly where it was. */
+function moveRow(rows: AddonInput[], from: number, to: number): AddonInput[] {
+  const next = [...rows];
+  const [row] = next.splice(from, 1);
+  if (row) next.splice(to, 0, row);
+  return next;
 }
 
 const EMPTY: ProductInput = {
   name: "", price: 0, description: "",
-  available: true, stock: null, max: null, isNew: false, photo: null,
+  available: true, stock: null, max: null, freeAddons: 0, isNew: false, photo: null,
   addons: addonsOf(null),
 };
 
@@ -70,6 +76,7 @@ export function ProductForm() {
           available: existing.available,
           stock: existing.stock ?? null,
           max: existing.max ?? null,
+          freeAddons: existing.freeAddons,
           isNew: existing.isNew,
           photo: null,
           addons: addonsOf(existing),
@@ -233,40 +240,43 @@ function Form({
           <legend className="mb-1 font-display text-[1.0625rem] font-semibold">Extras</legend>
           <p className="mt-0 mb-3 text-[.8125rem] text-fg-muted">
             Up to ten things this piece can be ordered with — a flower, a gift box. Give it
-            any and its <b>+</b> becomes an <b>Add</b> button that asks first. Leave the name
-            blank for a slot you're not using, and a blank price means free.
+            any and its <b>+</b> becomes an <b>Add</b> button that asks first. A blank price
+            means free, and dragging a row by its handle changes the order the picker
+            lists them in.
           </p>
 
-          <div className="grid gap-2.5">
-            {form.addons.map((addon, slot) => (
-              <AddonFields
-                key={slot}
-                slot={slot}
-                addon={addon}
-                error={fieldErrors[`addons.${slot}.name`] ?? fieldErrors[`addons.${slot}.price`]}
-                onChange={(patch) => set("addons", form.addons.map(
-                  (a, i) => (i === slot ? { ...a, ...patch } : a),
-                ))}
-              />
-            ))}
-          </div>
+          <Field label="Free extras" htmlFor="p-free-addons" optional
+                 hint="How many are included before the rest are charged. The dearest ones
+                       are the ones waived, so someone picking three pays for the cheapest.
+                       Blank charges for all of them.">
+            <input
+              type="number" id="p-free-addons" inputMode="numeric" min={0} max={MAX_ADDONS}
+              step={1}
+              value={form.freeAddons || ""}
+              onChange={(e) => set("freeAddons", toCount(e.target.value) ?? 0)}
+              className={INPUT}
+            />
+          </Field>
 
-          {/* A slot is only ever added on the end, never inserted: the number
-              is what a basket somebody has open keys its extras by, so the
-              ones already on the form have to keep theirs. */}
+          <AddonRows
+            rows={form.addons}
+            errors={fieldErrors}
+            onChange={(rows) => set("addons", rows)}
+          />
+
           <div className="mt-2.5 flex flex-wrap items-center gap-3">
             {form.addons.length < MAX_ADDONS && (
               <Button
                 type="button" variant="ghost" size="sm"
-                onClick={() => set("addons", [...form.addons, { ...EMPTY_ADDON }])}
+                onClick={() => set("addons", [...form.addons, emptyAddon(freeSlot(form.addons))])}
               >
-                Add another extra
+                {form.addons.length ? "Add another extra" : "Add an extra"}
               </Button>
             )}
             <span className="text-[.8125rem] text-fg-muted">
               {form.addons.length === MAX_ADDONS
-                ? `All ${MAX_ADDONS} slots are on the form.`
-                : `${form.addons.length} of ${MAX_ADDONS} slots`}
+                ? `All ${MAX_ADDONS} extras are in use.`
+                : `${form.addons.length} of ${MAX_ADDONS}`}
             </span>
           </div>
         </fieldset>
@@ -287,25 +297,138 @@ function Form({
   );
 }
 
-/* One slot. Kept on screen even when empty: the number is what a customer's
-   cart keys its extras by, so slot 2 stays slot 2 whether or not slot 1 is
-   filled in — emptying the middle one must not shift the later ones up. */
-function AddonFields({
-  slot, addon, error, onChange,
+/* The list of extras, and the reordering that goes with it.
+
+   Pointer events rather than HTML5 drag-and-drop: that API never fires on
+   touch, and this admin is used on a phone. One set of handlers covers mouse,
+   pen and finger, and `touch-action: none` on the handle is what stops the
+   page scrolling out from under a drag.
+
+   The arrow keys move a row too. A handle that only answers to dragging is one
+   a keyboard can't reach at all, and it costs four lines not to have that. */
+function AddonRows({
+  rows, errors, onChange,
 }: {
-  slot: number; addon: AddonInput; error?: string;
+  rows: AddonInput[];
+  errors: Record<string, string>;
+  onChange: (rows: AddonInput[]) => void;
+}) {
+  const [dragging, setDragging] = useState<number | null>(null);
+  const refs = useRef<(HTMLDivElement | null)[]>([]);
+
+  /* Hit-test the rows themselves rather than assume a row height: one with a
+     photo on it is taller than one without, and a guessed height drops the row
+     in the wrong place exactly when the list is worth reordering. */
+  const rowUnder = (y: number): number =>
+    refs.current.findIndex((el) => {
+      if (!el) return false;
+      const box = el.getBoundingClientRect();
+      return y >= box.top && y <= box.bottom;
+    });
+
+  const drag = (i: number) => ({
+    active: dragging === i,
+    onPointerDown: (e: PointerEvent<HTMLElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDragging(i);
+    },
+    onPointerMove: (e: PointerEvent<HTMLElement>) => {
+      if (dragging === null) return;
+      const over = rowUnder(e.clientY);
+      // Reordered as the pointer crosses into a row, so what you see while
+      // dragging is already the order you'll get when you let go.
+      if (over >= 0 && over !== dragging) {
+        onChange(moveRow(rows, dragging, over));
+        setDragging(over);
+      }
+    },
+    onPointerUp: (e: PointerEvent<HTMLElement>) => {
+      if (dragging === null) return;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      setDragging(null);
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      const to = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
+      if (to < 0 || to >= rows.length) return;
+      e.preventDefault();
+      onChange(moveRow(rows, i, to));
+      // Keep the handle under the finger that's still pressing the key.
+      requestAnimationFrame(() => refs.current[to]?.querySelector("button")?.focus());
+    },
+  });
+
+  return (
+    <div className="grid gap-2.5">
+      {rows.map((addon, i) => (
+        <AddonFields
+          /* Keyed by slot, not by index: dragging changes a row's index, and
+             keying on that would remount the inputs mid-drag and drop focus. */
+          key={addon.slot}
+          rowRef={(el) => { refs.current[i] = el; }}
+          index={i}
+          count={rows.length}
+          addon={addon}
+          drag={drag(i)}
+          error={errors[`addons.${i}.name`] ?? errors[`addons.${i}.price`]}
+          onChange={(patch) => onChange(rows.map((a, n) => (n === i ? { ...a, ...patch } : a)))}
+          onRemove={() => onChange(rows.filter((_, n) => n !== i))}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* One extra. The number on it is where it sits in the list, not its slot — the
+   slot is an identity a customer's open basket depends on, and it would mean
+   nothing to the person filling this in. */
+function AddonFields({
+  index, count, addon, error, rowRef, drag, onChange, onRemove,
+}: {
+  index: number;
+  count: number;
+  addon: AddonInput;
+  error?: string;
+  rowRef: (el: HTMLDivElement | null) => void;
+  drag: {
+    active: boolean;
+    onPointerDown: (e: PointerEvent<HTMLElement>) => void;
+    onPointerMove: (e: PointerEvent<HTMLElement>) => void;
+    onPointerUp: (e: PointerEvent<HTMLElement>) => void;
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
+  };
   onChange: (patch: Partial<AddonInput>) => void;
+  onRemove: () => void;
 }) {
   const shown = addon.photo ? URL.createObjectURL(addon.photo)
     : addon.removePhoto ? "" : addon.image;
+  const named = addon.name.trim() || `Extra ${index + 1}`;
 
   return (
-    <div className="rounded-sm border border-rule bg-surface-brand-soft/40 p-3">
+    <div
+      ref={rowRef}
+      className={`rounded-sm border bg-surface-brand-soft/40 p-3
+                  ${drag.active ? "border-selected shadow-card" : "border-rule"}`}
+    >
       <div className="flex flex-wrap items-end gap-2.5">
+        <button
+          type="button"
+          aria-label={`Move ${named}, ${index + 1} of ${count}. Drag, or use the arrow keys.`}
+          {...drag}
+          /* touch-none: without it the browser claims the gesture as a scroll
+             and the row never moves on a phone. */
+          className="mb-1.5 grid size-9 flex-none cursor-grab touch-none place-items-center
+                     rounded-xs text-fg-muted select-none active:cursor-grabbing
+                     hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2
+                     focus-visible:outline-focus-ring"
+        >
+          <span aria-hidden="true" className="text-base leading-none">⠿</span>
+        </button>
+
         <label className="min-w-0 flex-1 text-[.8125rem]">
-          <span className="mb-1 block text-fg-muted">Extra {slot + 1}</span>
+          <span className="mb-1 block text-fg-muted">Extra {index + 1}</span>
           <input
-            type="text" value={addon.name} placeholder="Not used"
+            type="text" value={addon.name} placeholder="Name it"
             onChange={(e) => onChange({ name: e.target.value })}
             className={INPUT}
           />
@@ -322,31 +445,48 @@ function AddonFields({
             className={INPUT}
           />
         </label>
+
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${named}`}
+          className="mb-1.5 grid size-9 flex-none cursor-pointer place-items-center rounded-xs
+                     text-lg leading-none text-fg-muted hover:bg-surface
+                     focus-visible:outline-2 focus-visible:outline-offset-2
+                     focus-visible:outline-focus-ring"
+        >
+          ×
+        </button>
       </div>
 
-      {/* Only worth asking about once the slot is actually in use. */}
-      {addon.name.trim() !== "" && (
-        <div className="mt-2.5 flex items-center gap-2.5">
-          {shown && (
-            <img src={shown} alt=""
-                 className="size-10 flex-none rounded-xs bg-surface object-cover" />
-          )}
-          <input
-            type="file" accept="image/*"
-            onChange={(e) => onChange({ photo: e.target.files?.[0] ?? null, removePhoto: false })}
-            className="min-w-0 flex-1 text-xs"
-          />
-          {shown && !addon.photo && (
-            <button
-              type="button"
-              onClick={() => onChange({ removePhoto: true })}
-              className="shrink-0 cursor-pointer text-xs text-fg-muted underline"
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      )}
+      {/* Always here. It used to appear only once the extra had a name, which
+          saved a line of markup and cost the one thing the row is for: with
+          nothing typed yet there was no file input on screen at all, and no
+          way to tell that from a photo field that doesn't work. */}
+      <div className="mt-2.5 flex items-center gap-2.5">
+        {shown && (
+          <img src={shown} alt=""
+               className="size-10 flex-none rounded-xs bg-surface object-cover" />
+        )}
+        {/* Labelled, because a bare file input announces itself as "Choose
+            file" and nothing else — on a form with one of these per extra
+            that names none of them. */}
+        <input
+          type="file" accept="image/*"
+          aria-label={`Photo for ${named}`}
+          onChange={(e) => onChange({ photo: e.target.files?.[0] ?? null, removePhoto: false })}
+          className="min-w-0 flex-1 text-xs"
+        />
+        {shown && !addon.photo && (
+          <button
+            type="button"
+            onClick={() => onChange({ removePhoto: true })}
+            className="shrink-0 cursor-pointer text-xs text-fg-muted underline"
+          >
+            Remove
+          </button>
+        )}
+      </div>
 
       {error && <ErrorText>{error}</ErrorText>}
     </div>

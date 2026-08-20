@@ -37,6 +37,9 @@ export interface Product {
   stock?: number | undefined;
   /** Most one customer may order in a single go. Undefined means no cap. */
   max?: number | undefined;
+  /* How many extras this piece includes at no charge, dearest first. 0 — the
+     ordinary case — charges for every one. */
+  freeAddons: number;
   isNew: boolean;
   /* What this piece may be ordered with, in slot order — which is the order
      the picker lists them. Empty means the + adds it straight away. */
@@ -111,15 +114,20 @@ export interface ProductInput {
   available: boolean;
   stock: number | null;
   max: number | null;
+  /** How many extras come at no charge. 0, not null — blank means none. */
+  freeAddons: number;
   isNew: boolean;
   /** A newly chosen file, or null to leave the existing photo alone. */
   photo: File | null;
-  /* One entry per slot the form is showing. A blank name means the slot isn't
-     used, and the API drops it — which is how an extra is removed. */
+  /* One entry per extra, in the order to show them. An entry that isn't sent
+     is removed; its index is the position, its slot is inside it. */
   addons: AddonInput[];
 }
 
 export interface AddonInput {
+  /* Which extra this is, and never its place in the list — a cart keys a line
+     by the slot, so it has to survive being dragged somewhere else. */
+  slot: number;
   name: string;
   /** Blank means free, which is deliberately distinct from unnamed. */
   price: number | null;

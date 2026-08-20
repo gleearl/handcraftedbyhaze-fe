@@ -144,7 +144,7 @@ appear in the shop — not archived ones.
   "stock": 3,                 // optional. "Only N left" at ≤3, sold out at 0
   "max": 2,                   // optional. Cap per customer per order
   "is_new": false,            // optional. "New" badge; `isNew` also accepted
-  "addons": [                 // optional. Up to ten extras, in slot order
+  "addons": [                 // optional. Up to ten, in the order to show them
     { "slot": 0, "name": "Gift box", "price": 50, "image": "/assets/box.jpg" }
   ]
 }
@@ -213,11 +213,27 @@ A piece can be offered with up to ten extras, each priced on its own — a
 flower on a croissant, a gift box, a handwritten note. Give a piece any and its
 **+** becomes an **Add** button that opens a picker.
 
+**`slot` is which extra it is; the array order is where to show it.** The two
+are separate on purpose. A cart line is keyed by the slots chosen for it, so a
+slot can never move — but the owner can drag the extras into any order in the
+admin, and the API sends them already arranged. Everything here looks an extra
+up by slot and renders in the order it arrived, so reordering in the admin
+never touches a basket someone has open.
+
 **The picker lists "No add-on" first, already ticked**, so the default is a
 choice someone can see and point at rather than an empty state they have to
 work out. Ticking an extra clears it; clearing the last extra brings it back;
 it can't be turned off on its own. The confirm button carries the running
 per-piece price, so nobody meets the total for the first time at payment.
+
+**A piece can include some extras for free.** `freeAddons` says how many, and
+the ones waived are the *dearest*, so picking a third moves the charge onto the
+cheapest rather than the newest. An extra already priced at ₱0 sorts last and
+never spends an allowance a paid one could have used. The picker says "any N
+free" up front and strikes through the price of each row the allowance is
+covering, recomputed as they tick — a discount nobody can see until checkout is
+just a surprise. `priceExtras` in `cart.ts` is the only place this is decided,
+and the picker, the cart and the order text all call it.
 
 **Prices are per piece.** Two croissants with a ₱50 box is ₱400, not ₱350.
 

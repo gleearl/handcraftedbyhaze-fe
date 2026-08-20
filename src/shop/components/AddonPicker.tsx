@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Product } from "../../lib/api/types";
+import { priceExtras } from "../../lib/cart";
 import { peso } from "../../lib/format";
 
 interface Props {
@@ -38,11 +39,21 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
     return () => dialog.removeEventListener("close", close);
   }, [onClose]);
 
-  const unit = useMemo(
-    () => p.price + picked.reduce(
-      (n, slot) => n + (p.addons.find((a) => a.slot === slot)?.price ?? 0), 0,
-    ),
+  /* Priced through the same function the cart uses, so the number on this
+     button and the number on the order can't drift apart. */
+  const priced = useMemo(
+    () => priceExtras(p.addons.filter((a) => picked.includes(a.slot)), p.freeAddons),
     [p, picked],
+  );
+
+  const unit = p.price + priced.reduce((n, e) => n + e.charged, 0);
+
+  /* Which of the ticked ones the allowance actually landed on. It moves as
+     they tick: a third, dearer extra takes a free place and pushes the charge
+     onto the cheapest, and the rows have to show that as it happens. */
+  const waived = useMemo(
+    () => new Set(priced.filter((e) => e.waived).map((e) => e.addon.slot)),
+    [priced],
   );
 
   /* "No add-on" is a row rather than an unticked-everything state, because an
@@ -89,6 +100,16 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
                                text-[.6875rem] font-semibold tracking-[.02em] text-fg-secondary">
                 optional
               </span>
+              {/* Said up front, because a discount nobody knows about is just a
+                  surprise at checkout. "Any", not "the first" — pick more than
+                  the allowance and it lands on the dearest, whatever order they
+                  were ticked in. */}
+              {p.freeAddons > 0 && (
+                <span className="ml-1.5 inline-block rounded-full bg-surface-brand-soft px-2 py-px
+                                 text-[.6875rem] font-semibold tracking-[.02em] text-fg-brand">
+                  any {p.freeAddons} free
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -118,6 +139,7 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
               label={a.name}
               image={a.image}
               price={a.price}
+              waived={waived.has(a.slot)}
               checked={picked.includes(a.slot)}
               onChange={() => toggle(a.slot)}
             />
@@ -145,10 +167,12 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
 }
 
 function Row({
-  label, image, price, checked, onChange, autoFocus, quiet,
+  label, image, price, waived, checked, onChange, autoFocus, quiet,
 }: {
   label: string; image?: string; price?: number; checked: boolean;
   onChange: () => void; autoFocus?: boolean;
+  /** True when the piece's free allowance is covering this one right now. */
+  waived?: boolean;
   /** The "No add-on" row: set apart, because it answers a different question. */
   quiet?: boolean;
 }) {
@@ -190,7 +214,12 @@ function Row({
       </span>
       {typeof price === "number" && (
         <span className="flex-none text-sm font-semibold tabular-nums text-fg-brand">
-          {price > 0 ? "+" + peso(price) : "Free"}
+          {/* The list price stays visible, struck through, so it's clear what
+              the piece is giving away rather than just that this one is free. */}
+          {waived && price > 0 && (
+            <s className="mr-1.5 font-normal text-fg-muted">{peso(price)}</s>
+          )}
+          {waived || price === 0 ? "Free" : "+" + peso(price)}
         </span>
       )}
     </label>

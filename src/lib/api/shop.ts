@@ -59,6 +59,9 @@ export function toProduct(raw: Record<string, unknown>): Product | null {
     available: raw.available !== false && stock !== 0,
     stock,
     max: num(raw.max),
+    /* Absent or unreadable means none are free, which is the ordinary case —
+       never a reason to start giving extras away. */
+    freeAddons: Math.max(0, Math.floor(Number(raw.free_addons ?? raw.freeAddons)) || 0),
     // Accept both spellings so the backend can use either convention.
     isNew: raw.is_new === true || raw.isNew === true,
     addons: toAddons(raw.addons),

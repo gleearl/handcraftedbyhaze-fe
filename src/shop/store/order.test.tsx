@@ -18,10 +18,10 @@ const KEY = "hbh-order-v2";
    products arrive — the same order the real app runs in. */
 const CATALOGUE: Product[] = [{
   id: "p-c", name: "Pink Flower Croissant", price: 150, image: "",
-  description: "", available: true, isNew: false, addons: [],
+  description: "", available: true, isNew: false, freeAddons: 0, addons: [],
 }, {
   id: "n-sc", name: "Personalized Croissant", price: 175, image: "",
-  description: "", available: true, isNew: false,
+  description: "", available: true, isNew: false, freeAddons: 0,
   addons: [
     { slot: 0, name: "Pink flower", price: 40, image: "" },
     { slot: 1, name: "Gift box", price: 50, image: "" },

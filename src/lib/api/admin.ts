@@ -121,18 +121,20 @@ function toFormData(input: ProductInput, method?: "PATCH"): FormData {
   data.append("is_new", input.isNew ? "1" : "0");
   data.append("stock", input.stock === null ? "" : String(input.stock));
   data.append("max", input.max === null ? "" : String(input.max));
+  data.append("free_addons", String(input.freeAddons));
   if (input.photo) data.append("photo", input.photo, input.photo.name);
 
-  /* Indexed by slot, not by position in the form: the cart keys a chosen
-     combination by slot, so slot 2 has to stay slot 2 even when slot 1 is
-     blank. An unnamed slot is sent anyway and dropped server-side, which is
-     how an extra is removed. */
-  input.addons.forEach((addon, slot) => {
-    data.append(`addons[${slot}][slot]`, String(slot));
-    data.append(`addons[${slot}][name]`, addon.name.trim());
-    data.append(`addons[${slot}][price]`, addon.price === null ? "" : String(addon.price));
-    if (addon.photo) data.append(`addons[${slot}][photo]`, addon.photo, addon.photo.name);
-    if (addon.removePhoto) data.append(`addons[${slot}][remove_photo]`, "1");
+  /* Two different numbers, and the difference is the whole design. The index
+     is where the extra is shown, so the order these go out in is the order the
+     owner arranged. The slot inside is which extra it *is* — a cart keys a
+     chosen combination by it, so it travels with the row rather than being
+     read off its position. An extra is removed by not being sent. */
+  input.addons.forEach((addon, position) => {
+    data.append(`addons[${position}][slot]`, String(addon.slot));
+    data.append(`addons[${position}][name]`, addon.name.trim());
+    data.append(`addons[${position}][price]`, addon.price === null ? "" : String(addon.price));
+    if (addon.photo) data.append(`addons[${position}][photo]`, addon.photo, addon.photo.name);
+    if (addon.removePhoto) data.append(`addons[${position}][remove_photo]`, "1");
   });
   // PHP doesn't parse a multipart body on PATCH, so Laravel reads this instead.
   if (method) data.append("_method", method);

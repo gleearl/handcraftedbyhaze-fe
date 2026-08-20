@@ -28,6 +28,8 @@ export interface CartLine extends Product {
   key: string;
   /** The extras actually chosen — not `product.addons`, which is what's offered. */
   extras: Addon[];
+  /** The same extras with the piece's free allowance applied. */
+  priced: PricedExtra[];
   qty: number;
   /** One of this combination: the piece plus its extras. */
   unit: number;
@@ -49,6 +51,39 @@ export function extrasFromKey(key: string): number[] {
 
 export const hasAddons = (p: Product): boolean => p.addons.length > 0;
 
+/** One chosen extra, and what it actually costs after the piece's allowance. */
+export interface PricedExtra {
+  addon: Addon;
+  /** Its price, or 0 when the allowance covered it. */
+  charged: number;
+  /** True when this is one the piece includes at no charge. */
+  waived: boolean;
+}
+
+/* What a set of chosen extras costs on one piece, given how many that piece
+   includes for free.
+
+   The allowance goes to the dearest, which is the answer a customer would pick
+   for themselves — and sorting that way also means an extra already priced at
+   ₱0 sorts last and never burns an allowance a paid one could have used.
+   Sorting indices rather than the extras keeps the result in the order the
+   picker shows them, which is the order the owner arranged. */
+export function priceExtras(extras: Addon[], free: number): PricedExtra[] {
+  const waived = new Set(
+    extras
+      .map((_, i) => i)
+      // Dearest first; equal prices keep their order, so the earlier one wins.
+      .sort((a, b) => (extras[b]!.price - extras[a]!.price) || (a - b))
+      .slice(0, Math.max(0, free)),
+  );
+
+  return extras.map((addon, i) => ({
+    addon,
+    charged: waived.has(i) ? 0 : addon.price,
+    waived: waived.has(i),
+  }));
+}
+
 export const productById = (products: Product[], id: string): Product | undefined =>
   products.find((p) => p.id === id);
 
@@ -64,17 +99,20 @@ export function cartLines(cart: Cart, products: Product[]): CartLine[] {
       const p = entry && entry.qty > 0 ? productById(products, entry.id) : undefined;
       if (!p) return null;
 
-      /* By slot, not by position — a slot emptied in the admin mid-session
-         simply stops being an extra, and the ones after it keep their numbers
-         rather than sliding onto somebody else's. */
-      const extras = entry.extras
-        .map((slot) => p.addons.find((a) => a.slot === slot))
-        .filter((a): a is Addon => a !== undefined);
-      const unit = p.price + extras.reduce((n, a) => n + a.price, 0);
+      /* Matched by slot, never by position — a slot emptied in the admin
+         mid-session simply stops being an extra, and the ones left keep their
+         own numbers rather than sliding onto somebody else's.
+
+         Listed in the catalogue's order rather than the cart's, so a row reads
+         in the order the picker offered it. What's stored stays sorted by slot
+         either way: that's what the line's key is built from. */
+      const extras = p.addons.filter((a) => entry.extras.includes(a.slot));
+      const priced = priceExtras(extras, p.freeAddons);
+      const unit = p.price + priced.reduce((n, e) => n + e.charged, 0);
 
       // `extras` after the spread on purpose: p.addons is what's *offered*,
       // entry.extras is what was *chosen*, and only the second belongs here.
-      return { ...p, key, extras, qty: entry.qty, unit, line: unit * entry.qty };
+      return { ...p, key, extras, priced, qty: entry.qty, unit, line: unit * entry.qty };
     })
     .filter((l): l is CartLine => l !== null);
 }
@@ -170,6 +208,9 @@ export function clampCartToStock(
 export function itemsAsText(lines: CartLine[], total: number): string {
   return lines.map((l) =>
     `${l.qty} × ${l.name} — ${peso(l.line)}`
-    + l.extras.map((a) => `\n    + ${a.name} (${a.price > 0 ? peso(a.price) : "Free"})`).join("")
+    /* What was charged, not what it lists for: an extra the piece included
+       reads "(Free)", which is what the API parses back as 0. The record has
+       to say what somebody actually paid. */
+    + l.priced.map((e) => `\n    + ${e.addon.name} (${e.charged > 0 ? peso(e.charged) : "Free"})`).join("")
   ).join("\n") + `\nSubtotal: ${peso(total)}`;
 }
