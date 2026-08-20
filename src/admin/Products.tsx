@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { archiveProduct, fetchAdminProducts, reorderProducts } from "../lib/api/admin";
+import {
+  archiveProduct, fetchAdminProducts, reorderProducts, restoreProduct,
+} from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
 import type { AdminProduct } from "../lib/api/types";
 import { useAsync } from "./useAsync";
@@ -50,20 +52,25 @@ export function Products() {
     }
   }
 
-  async function archive(id: string, name: string) {
-    // Archiving is reversible in the database but not from this screen yet,
-    // so it's worth one confirm rather than a silent surprise.
-    if (!confirm(`Hide "${name}" from the shop? Past orders keep it.`)) return;
+  /** Hide and unhide are the same shape, so they run through the same door. */
+  async function setHidden(id: string, hidden: boolean) {
     setBusyId(id);
     setActionError(null);
     try {
-      await archiveProduct(id);
+      await (hidden ? archiveProduct(id) : restoreProduct(id));
       reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : GENERIC_ERROR);
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function archive(id: string, name: string) {
+    // Undoable now, but it still takes the piece out of the shop, so it's
+    // worth one confirm rather than a silent surprise.
+    if (!confirm(`Hide "${name}" from the shop? You can put it back later.`)) return;
+    await setHidden(id, true);
   }
 
   return (
@@ -112,7 +119,7 @@ export function Products() {
                     p.isNew ? "New" : null,
                   ].filter(Boolean).join(" · ")}
                   busy={busyId === p.id}
-                  onArchive={() => void archive(p.id, p.name)}
+                  onHide={() => void archive(p.id, p.name)}
                   drag={drag(i)}
                   dragLabel={dragLabel(p.name, i, live.length)}
                 />
@@ -127,10 +134,22 @@ export function Products() {
           <h2 className="mt-8 mb-3 text-xs font-semibold uppercase tracking-[.12em] text-fg-muted">
             Hidden from the shop
           </h2>
+          <p className="mt-0 mb-3 text-[.8125rem] text-fg-muted">
+            These aren't listed in the shop. Unhide one to put it back — it returns at
+            the bottom of the list above, ready to be dragged where you want it.
+          </p>
           <CardList>
             {archived.map((p) => (
               <li key={p.id} className="opacity-60">
-                <Row id={p.id} name={p.name} price={p.price} image={p.image} meta="Archived" />
+                <Row
+                  id={p.id}
+                  name={p.name}
+                  price={p.price}
+                  image={p.image}
+                  meta="Hidden"
+                  busy={busyId === p.id}
+                  onUnhide={() => void setHidden(p.id, false)}
+                />
               </li>
             ))}
           </CardList>
@@ -141,10 +160,10 @@ export function Products() {
 }
 
 function Row({
-  id, name, price, image, meta, busy, onArchive, drag, dragLabel: label,
+  id, name, price, image, meta, busy, onHide, onUnhide, drag, dragLabel: label,
 }: {
   id: string; name: string; price: number; image: string; meta: string;
-  busy?: boolean; onArchive?: () => void;
+  busy?: boolean; onHide?: () => void; onUnhide?: () => void;
   drag?: DragProps; dragLabel?: string;
 }) {
   return (
@@ -173,17 +192,35 @@ function Row({
         Edit
       </Link>
 
-      {onArchive && (
+      {/* The name is in the label because every row's button says the same
+          word, and a screen reader reads them out of the row they sit in. */}
+      {onHide && (
         <button
           type="button"
-          onClick={onArchive}
+          onClick={onHide}
           disabled={busy}
-          className="flex-none cursor-pointer border-0 bg-transparent text-sm text-fg-muted
-                     underline disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`Hide ${name} from the shop`}
+          className={ROW_ACTION}
         >
           {busy ? "Hiding…" : "Hide"}
+        </button>
+      )}
+
+      {onUnhide && (
+        <button
+          type="button"
+          onClick={onUnhide}
+          disabled={busy}
+          aria-label={`Unhide ${name} and put it back in the shop`}
+          className={ROW_ACTION}
+        >
+          {busy ? "Unhiding…" : "Unhide"}
         </button>
       )}
     </div>
   );
 }
+
+const ROW_ACTION =
+  `flex-none cursor-pointer border-0 bg-transparent text-sm text-fg-muted underline
+   disabled:cursor-not-allowed disabled:opacity-50`;

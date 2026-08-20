@@ -66,3 +66,41 @@ describe("arranging the products list", () => {
     expect(screen.queryByRole("button", { name: /^Move Gone/ })).toBeNull();
   });
 });
+
+describe("hiding and unhiding a piece", () => {
+  it("puts a hidden piece back in the shop and reloads the list", async () => {
+    const user = userEvent.setup();
+    mocked.fetchAdminProducts.mockResolvedValue([
+      product("bunny", "Bunny"), product("gone", "Gone", true),
+    ]);
+    mocked.restoreProduct.mockResolvedValue(undefined);
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: /unhide gone/i }));
+
+    expect(mocked.restoreProduct).toHaveBeenCalledWith("gone");
+    await waitFor(() => expect(mocked.fetchAdminProducts).toHaveBeenCalledTimes(2));
+  });
+
+  it("says so and leaves the piece hidden when unhiding fails", async () => {
+    const user = userEvent.setup();
+    mocked.fetchAdminProducts.mockResolvedValue([product("gone", "Gone", true)]);
+    mocked.restoreProduct.mockRejectedValue(new Error("offline"));
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: /unhide gone/i }));
+
+    await screen.findByText(/something went wrong/i);
+    expect(screen.getByRole("button", { name: /unhide gone/i })).toBeInTheDocument();
+  });
+
+  it("asks before hiding a piece, and does nothing when the answer is no", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderList();
+
+    await user.click((await screen.findAllByRole("button", { name: /hide bunny/i }))[0]);
+
+    expect(mocked.archiveProduct).not.toHaveBeenCalled();
+  });
+});

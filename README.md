@@ -56,8 +56,12 @@ Two consequences worth knowing before changing anything in `src/lib/api/`:
   back as `/storage/…` or `/api/admin/…`, which is relative *to the API*. Left
   bare it would resolve against the shop and 404.
 
-`VITE_API_URL` lives in `.env.production`, which is committed on purpose — it's
-a public URL, and without it in CI the build ships pointing at nowhere.
+`VITE_API_URL` is fixed per mode, in two committed files — both public URLs,
+neither a secret. `.env.production` holds the live origin, and without it in CI
+the build ships pointing at nowhere. `.env.development` holds
+`http://localhost:8000`, so `npm run dev` reaches a local API with no arguments
+and no one has to remember the port. Vite loads one or the other by mode, so
+the dev value cannot reach a production build.
 
 ### Deploying
 
@@ -68,9 +72,12 @@ Pages serves a file or it 404s — it has no SPA fallback — so the build copie
 `index.html` to `404.html`. That's what lets `/admin/orders/5` survive a hard
 refresh: Pages hands back the app shell and React Router reads the URL.
 
-For local work against a local API, set `VITE_API_URL=http://localhost:8000` in
-`.env` and run `npm run dev`. That API must allow this origin with credentials —
-its `FRONTEND_URL` does that.
+For local work against a local API, `npm run dev` is the whole command:
+`.env.development` already points at `http://localhost:8000`, and the dev server
+port is pinned to 5173 in `vite.config.ts` rather than merely preferred — the
+API's `FRONTEND_URL` names that port both for its `/` redirect and for the CORS
+allow-list, so a server that slid to the next free port would be shut out of the
+API it is talking to.
 
 ---
 
@@ -110,7 +117,10 @@ At `/admin`, behind a login.
 Order statuses are `new → confirmed → fulfilled`, plus `cancelled`.
 
 Products are **archived, never deleted** — past orders still name them. An
-archived piece disappears from the shop and stays visible to you.
+archived piece disappears from the shop and stays visible to you, in its own
+section, with an **Unhide** button that puts it back. It returns at the bottom
+of the live list, not where it used to sit: while it was hidden the pieces
+around it were renumbered, so its old spot is somebody else's now.
 
 ### About `/admin`
 
@@ -194,6 +204,7 @@ to discover which accounts exist.
 | `PATCH /api/admin/products/order` | `{ids: [...]}` — the new display order |
 | `POST /api/admin/products/{id}` | Update, with `_method=PATCH` |
 | `DELETE /api/admin/products/{id}` | Archive |
+| `POST /api/admin/products/{id}/restore` | Unarchive, back at the bottom of the list |
 
 Order fields are accepted in `snake_case` (`customer_name`, `placed_at`,
 `item_count`, `unit_price`, `receipt_url`) or camelCase.

@@ -164,3 +164,14 @@ export async function reorderProducts(ids: string[]): Promise<void> {
 export async function archiveProduct(id: string): Promise<void> {
   await request<unknown>(`/api/admin/products/${id}`, { method: "DELETE" });
 }
+
+/**
+ * The undo for that: back in the shop, at the bottom of the list.
+ *
+ * Not back where it was — while it was hidden the pieces around it were
+ * renumbered, so the server lands it past the last one and the owner drags it
+ * from there.
+ */
+export async function restoreProduct(id: string): Promise<void> {
+  await request<unknown>(`/api/admin/products/${id}/restore`, { method: "POST" });
+}
