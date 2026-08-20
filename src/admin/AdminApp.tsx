@@ -7,6 +7,8 @@ import { Orders } from "./Orders";
 import { OrderDetail } from "./OrderDetail";
 import { Products } from "./Products";
 import { ProductForm } from "./ProductForm";
+import { Extras } from "./Extras";
+import { ExtraForm } from "./ExtraForm";
 import { Settings } from "./Settings";
 import { Loading } from "./components/ui";
 
@@ -38,6 +40,8 @@ function AdminRoutes() {
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="products" element={<Products />} />
         <Route path="products/:id" element={<ProductForm />} />
+        <Route path="extras" element={<Extras />} />
+        <Route path="extras/:id" element={<ExtraForm />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/admin/orders" replace />} />
       </Route>
@@ -80,6 +84,7 @@ function Shell() {
           <nav className="flex gap-1.5">
             <NavLink to="/admin/orders" className={tab}>Orders</NavLink>
             <NavLink to="/admin/products" className={tab}>Products</NavLink>
+            <NavLink to="/admin/extras" className={tab}>Extras</NavLink>
             <NavLink to="/admin/settings" className={tab}>Settings</NavLink>
           </nav>
 
