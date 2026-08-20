@@ -7,6 +7,7 @@ import { Orders } from "./Orders";
 import { OrderDetail } from "./OrderDetail";
 import { Products } from "./Products";
 import { ProductForm } from "./ProductForm";
+import { Settings } from "./Settings";
 import { Loading } from "./components/ui";
 
 /* Default-exported because routes.tsx pulls this in with React.lazy — the
@@ -37,6 +38,7 @@ function AdminRoutes() {
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="products" element={<Products />} />
         <Route path="products/:id" element={<ProductForm />} />
+        <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/admin/orders" replace />} />
       </Route>
     </Routes>
@@ -78,6 +80,7 @@ function Shell() {
           <nav className="flex gap-1.5">
             <NavLink to="/admin/orders" className={tab}>Orders</NavLink>
             <NavLink to="/admin/products" className={tab}>Products</NavLink>
+            <NavLink to="/admin/settings" className={tab}>Settings</NavLink>
           </nav>
 
           <span className="ml-auto flex items-center gap-3 text-[.8125rem] text-fg-muted">

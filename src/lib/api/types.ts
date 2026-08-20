@@ -142,3 +142,13 @@ export interface AdminUser {
   name: string;
   email: string;
 }
+
+/**
+ * The admin's notification settings.
+ *
+ * An empty list is not "unset" — it is the way notifications are turned off,
+ * which is why there is no separate enabled flag.
+ */
+export interface Settings {
+  orderNotificationEmails: string[];
+}

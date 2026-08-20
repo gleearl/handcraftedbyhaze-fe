@@ -7,7 +7,7 @@ import { primeCsrf, request } from "./http";
 import { normalizeImage } from "./image";
 import { toProduct, unwrap } from "./shop";
 import type {
-  AdminProduct, AdminUser, Order, OrderStatus, OrderSummary, ProductInput,
+  AdminProduct, AdminUser, Order, OrderStatus, OrderSummary, ProductInput, Settings,
 } from "./types";
 
 /* ── Session ───────────────────────────────────────────────────────────── */
@@ -174,4 +174,50 @@ export async function archiveProduct(id: string): Promise<void> {
  */
 export async function restoreProduct(id: string): Promise<void> {
   await request<unknown>(`/api/admin/products/${id}/restore`, { method: "POST" });
+}
+
+/* ── Settings ──────────────────────────────────────────────────────────── */
+
+const toSettings = (body: unknown): Settings => {
+  const data = (((body as { data?: unknown })?.data ?? body) ?? {}) as Record<string, unknown>;
+  const emails = data.order_notification_emails;
+
+  return {
+    orderNotificationEmails: Array.isArray(emails) ? emails.map(String) : [],
+  };
+};
+
+export async function fetchSettings(signal?: AbortSignal): Promise<Settings> {
+  return toSettings(await request<unknown>("/api/admin/settings", signal ? { signal } : {}));
+}
+
+/**
+ * The whole list, every time — an address is removed by not being sent.
+ *
+ * The server does the trimming, lowercasing and de-duplicating, and hands back
+ * what it stored, so the form shows the addresses as they will actually be used
+ * rather than as they were typed.
+ */
+export async function saveSettings(emails: string[]): Promise<Settings> {
+  return toSettings(await request<unknown>("/api/admin/settings", {
+    method: "PUT",
+    body: { order_notification_emails: emails },
+  }));
+}
+
+/**
+ * Send the real notification, filled with a made-up order, to the saved list.
+ *
+ * Unlike a live order's email this one is sent inside the request, so a refused
+ * send throws an ApiError carrying the provider's own message. That is the only
+ * place delivery problems are visible — a real notification that fails is
+ * logged on the server and nowhere else.
+ *
+ * @returns the addresses it reached.
+ */
+export async function sendTestEmail(): Promise<string[]> {
+  const body = await request<unknown>("/api/admin/settings/test-email", { method: "POST" });
+  const data = (((body as { data?: unknown })?.data ?? body) ?? {}) as Record<string, unknown>;
+
+  return Array.isArray(data.sent_to) ? data.sent_to.map(String) : [];
 }

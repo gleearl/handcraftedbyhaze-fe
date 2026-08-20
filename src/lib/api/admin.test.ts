@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchOrder, fetchOrders, setOrderStatus, updateProduct } from "./admin";
+import {
+  fetchOrder, fetchOrders, fetchSettings, saveSettings, sendTestEmail, setOrderStatus, updateProduct,
+} from "./admin";
+import { ApiError } from "./http";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -139,5 +142,41 @@ describe("product writes", () => {
     const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
 
     expect(body.get("addons[0][price]")).toBe("");
+  });
+});
+
+describe("notification settings", () => {
+  it("unwraps the address list and tolerates a response without one", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { order_notification_emails: ["a@b.com"] } }));
+    expect(await fetchSettings()).toEqual({ orderNotificationEmails: ["a@b.com"] });
+
+    fetchMock.mockResolvedValueOnce(json({ data: {} }));
+    expect(await fetchSettings()).toEqual({ orderNotificationEmails: [] });
+  });
+
+  it("saves the list as JSON on PUT under the name Laravel expects", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { order_notification_emails: ["a@b.com"] } }));
+
+    expect(await saveSettings(["a@b.com"])).toEqual({ orderNotificationEmails: ["a@b.com"] });
+
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    expect(url).toBe("/api/admin/settings");
+    expect(init.method).toBe("PUT");
+    expect(init.body).toBe('{"order_notification_emails":["a@b.com"]}');
+  });
+
+  it("reports who the test reached", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { sent_to: ["a@b.com", "c@d.com"] } }));
+
+    expect(await sendTestEmail()).toEqual(["a@b.com", "c@d.com"]);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe("POST");
+  });
+
+  it("surfaces the provider's own reason when a test send is refused", async () => {
+    fetchMock.mockResolvedValueOnce(json({ message: "API key is invalid" }, 502));
+
+    const error = await sendTestEmail().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 502, message: "API key is invalid" });
   });
 });

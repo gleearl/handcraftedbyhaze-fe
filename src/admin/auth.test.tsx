@@ -14,6 +14,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchOrders.mockResolvedValue([]);
   mocked.fetchAdminProducts.mockResolvedValue([]);
+  mocked.fetchSettings.mockResolvedValue({ orderNotificationEmails: [] });
 });
 
 /* Mounted under "/admin/*" exactly as routes.tsx does — AdminApp's own routes
@@ -91,5 +92,20 @@ describe("admin auth gate", () => {
     // than a failed request.
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Shop admin" })).toBeInTheDocument());
+  });
+});
+
+describe("the settings screen", () => {
+  it("is reachable from the nav and deep-linkable", async () => {
+    const user = userEvent.setup();
+    mocked.me.mockResolvedValue(USER);
+    renderAt("/admin/orders");
+
+    await user.click(await screen.findByRole("link", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Order notifications" })).toBeInTheDocument();
+
+    renderAt("/admin/settings");
+    await waitFor(() =>
+      expect(screen.getAllByRole("heading", { name: "Order notifications" })).toHaveLength(2));
   });
 });

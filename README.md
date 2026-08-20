@@ -113,6 +113,7 @@ At `/admin`, behind a login.
 | `/admin/orders/:id` | Items, customer, receipt, and the status control |
 | `/admin/products` | Live pieces, and archived ones in their own section |
 | `/admin/products/:id` | Edit; `/admin/products/new` to add |
+| `/admin/settings` | Who gets emailed when an order comes in |
 
 Order statuses are `new → confirmed → fulfilled`, plus `cancelled`.
 
@@ -205,6 +206,8 @@ to discover which accounts exist.
 | `POST /api/admin/products/{id}` | Update, with `_method=PATCH` |
 | `DELETE /api/admin/products/{id}` | Archive |
 | `POST /api/admin/products/{id}/restore` | Unarchive, back at the bottom of the list |
+| `GET/PUT /api/admin/settings` | `{order_notification_emails: [...]}` — the whole list, every time |
+| `POST /api/admin/settings/test-email` | Sends the real notification to that list; `{data: {sent_to: [...]}}` |
 
 Order fields are accepted in `snake_case` (`customer_name`, `placed_at`,
 `item_count`, `unit_price`, `receipt_url`) or camelCase.
@@ -225,6 +228,20 @@ Product writes are multipart because they carry a photo, and updates are sent as
 `POST` with a `_method=PATCH` field — PHP does not parse a multipart body on a
 real `PATCH`. `stock` and `max` are sent as empty strings when not set, which
 means *"not tracking it"* and is deliberately distinct from `0`.
+
+`PUT /settings` takes the entire address list — an address is removed by not
+being sent — and answers with what it stored, trimmed, lowercased and
+de-duplicated, so the form shows the addresses as they will actually be used
+rather than as they were typed. An **empty list is the off switch**; there is no
+separate enabled flag, and `present` rather than `required` is what lets it
+through. A malformed address is rejected per-position
+(`order_notification_emails.1`) and nothing is half-saved.
+
+`POST /settings/test-email` sends synchronously and returns **502** carrying the
+mail provider's own message when the send is refused. That is the opposite of a
+real order notification, which is sent after the response and only logged if it
+fails — and it is the reason the button exists. It answers **422** when the list
+is empty rather than reporting a success that reached nobody.
 
 ## Add-ons
 
@@ -357,12 +374,12 @@ src/
   admin/              the private side (its own chunk)
     AdminApp.tsx      routes + the auth gate
     useAuth.tsx       session state; never holds a credential
-    Orders  OrderDetail  Products  ProductForm  Login
+    Orders  OrderDetail  Products  ProductForm  Settings  Login
   lib/
     api/http.ts       the only module that knows about transport
     api/types.ts      the contract above
     api/shop.ts       catalogue + order submit
-    api/admin.ts      session, orders, product CRUD
+    api/admin.ts      session, orders, product CRUD, notification settings
     cart.ts           line items, combinations, totals, stock clamping
     validate.ts       rules and their exact wording
   styles/theme.css    the palette; edit this to retheme

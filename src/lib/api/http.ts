@@ -54,7 +54,7 @@ let onUnauthorized: UnauthorizedHandler = () => {};
 export function setUnauthorizedHandler(fn: UnauthorizedHandler) { onUnauthorized = fn; }
 
 interface Options {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** A plain object is sent as JSON; FormData is sent as-is. */
   body?: unknown;
   signal?: AbortSignal;
