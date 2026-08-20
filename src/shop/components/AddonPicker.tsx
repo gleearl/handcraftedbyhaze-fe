@@ -5,7 +5,7 @@ import { peso } from "../../lib/format";
 
 interface Props {
   product: Product;
-  /** Slots already on the line being edited; empty when adding a new one. */
+  /** Library ids already on the line being edited; empty when adding a new one. */
   chosen: number[];
   /** True when changing a line already in the order rather than adding one. */
   editing: boolean;
@@ -42,7 +42,7 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
   /* Priced through the same function the cart uses, so the number on this
      button and the number on the order can't drift apart. */
   const priced = useMemo(
-    () => priceExtras(p.addons.filter((a) => picked.includes(a.slot)), p.freeAddons),
+    () => priceExtras(p.addons.filter((a) => picked.includes(a.id)), p.freeAddons),
     [p, picked],
   );
 
@@ -52,7 +52,7 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
      they tick: a third, dearer extra takes a free place and pushes the charge
      onto the cheapest, and the rows have to show that as it happens. */
   const waived = useMemo(
-    () => new Set(priced.filter((e) => e.waived).map((e) => e.addon.slot)),
+    () => new Set(priced.filter((e) => e.waived).map((e) => e.addon.id)),
     [priced],
   );
 
@@ -61,8 +61,8 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
      you can just pick. It's exclusive with the rest: ticking an extra clears
      it, clearing the last extra brings it back, and it can't be turned off on
      its own — there's no such thing as choosing neither. */
-  const toggle = (slot: number) =>
-    setPicked((prev) => prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]);
+  const toggle = (id: number) =>
+    setPicked((prev) => prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]);
 
   return (
     <dialog
@@ -135,13 +135,13 @@ export function AddonPicker({ product: p, chosen, editing, onConfirm, onClose }:
           />
           {p.addons.map((a) => (
             <Row
-              key={a.slot}
+              key={a.id}
               label={a.name}
               image={a.image}
               price={a.price}
-              waived={waived.has(a.slot)}
-              checked={picked.includes(a.slot)}
-              onChange={() => toggle(a.slot)}
+              waived={waived.has(a.id)}
+              checked={picked.includes(a.id)}
+              onChange={() => toggle(a.id)}
             />
           ))}
         </div>

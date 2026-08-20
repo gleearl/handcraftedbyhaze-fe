@@ -8,9 +8,9 @@ const croissant = (freeAddons: number): Product => ({
   id: "c", name: "Croissant", price: 175, image: "", description: "",
   available: true, isNew: false, freeAddons,
   addons: [
-    { slot: 0, name: "Pink flower", price: 40, image: "" },
-    { slot: 1, name: "Gift box", price: 50, image: "" },
-    { slot: 2, name: "Note", price: 20, image: "" },
+    { id: 21, name: "Pink flower", price: 40, image: "" },
+    { id: 34, name: "Gift box", price: 50, image: "" },
+    { id: 108, name: "Note", price: 20, image: "" },
   ],
 });
 
@@ -70,5 +70,30 @@ describe("the add-on picker's running price", () => {
   it("doesn't promise anything when the piece includes none", () => {
     show(croissant(0));
     expect(screen.queryByText(/free$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("the add-on picker's confirm", () => {
+  it("hands back the library ids, ascending", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    // Ticked out of order, and the smaller id (21) is listed second here, so a
+    // pass-through of ticking order rather than a sort would slip by unnoticed.
+    render(
+      <AddonPicker
+        product={croissant(0)}
+        chosen={[]}
+        editing={false}
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText(/Gift box/i));
+    await user.click(screen.getByLabelText(/Pink flower/i));
+    await user.click(screen.getByRole("button", { name: /^Add · / }));
+
+    // Ascending, because the cart key is built from this exact array.
+    expect(onConfirm).toHaveBeenCalledWith([21, 34]);
   });
 });

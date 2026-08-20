@@ -23,8 +23,8 @@ const CATALOGUE: Product[] = [{
   id: "n-sc", name: "Personalized Croissant", price: 175, image: "",
   description: "", available: true, isNew: false, freeAddons: 0,
   addons: [
-    { slot: 0, name: "Pink flower", price: 40, image: "" },
-    { slot: 1, name: "Gift box", price: 50, image: "" },
+    { id: 0, name: "Pink flower", price: 40, image: "" },
+    { id: 1, name: "Gift box", price: 50, image: "" },
   ],
 }];
 
