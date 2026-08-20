@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchOrders.mockResolvedValue([]);
   mocked.fetchAdminProducts.mockResolvedValue([]);
-  mocked.fetchSettings.mockResolvedValue({ orderNotificationEmails: [] });
+  mocked.fetchSettings.mockResolvedValue({ orderNotificationEmails: [], mailSends: true, mailMailer: "resend" });
 });
 
 /* Mounted under "/admin/*" exactly as routes.tsx does — AdminApp's own routes

@@ -147,17 +147,34 @@ describe("product writes", () => {
 
 describe("notification settings", () => {
   it("unwraps the address list and tolerates a response without one", async () => {
-    fetchMock.mockResolvedValueOnce(json({ data: { order_notification_emails: ["a@b.com"] } }));
-    expect(await fetchSettings()).toEqual({ orderNotificationEmails: ["a@b.com"] });
+    fetchMock.mockResolvedValueOnce(json({ data: {
+      order_notification_emails: ["a@b.com"], mail_sends: true, mail_mailer: "resend",
+    } }));
+    expect(await fetchSettings()).toEqual({
+      orderNotificationEmails: ["a@b.com"], mailSends: true, mailMailer: "resend",
+    });
 
     fetchMock.mockResolvedValueOnce(json({ data: {} }));
-    expect(await fetchSettings()).toEqual({ orderNotificationEmails: [] });
+    expect(await fetchSettings()).toEqual({
+      orderNotificationEmails: [], mailSends: true, mailMailer: "",
+    });
+  });
+
+  it("reports a mailer that transmits nothing", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: {
+      order_notification_emails: [], mail_sends: false, mail_mailer: "log",
+    } }));
+    const settings = await fetchSettings();
+    expect(settings.mailSends).toBe(false);
+    expect(settings.mailMailer).toBe("log");
   });
 
   it("saves the list as JSON on PUT under the name Laravel expects", async () => {
-    fetchMock.mockResolvedValueOnce(json({ data: { order_notification_emails: ["a@b.com"] } }));
+    fetchMock.mockResolvedValueOnce(json({ data: {
+      order_notification_emails: ["a@b.com"], mail_sends: true, mail_mailer: "resend",
+    } }));
 
-    expect(await saveSettings(["a@b.com"])).toEqual({ orderNotificationEmails: ["a@b.com"] });
+    expect((await saveSettings(["a@b.com"])).orderNotificationEmails).toEqual(["a@b.com"]);
 
     const [url, init] = fetchMock.mock.calls.at(-1)!;
     expect(url).toBe("/api/admin/settings");

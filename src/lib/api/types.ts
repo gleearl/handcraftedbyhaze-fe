@@ -151,4 +151,15 @@ export interface AdminUser {
  */
 export interface Settings {
   orderNotificationEmails: string[];
+  /**
+   * Whether the server's configured mailer actually transmits.
+   *
+   * Laravel falls back to the `log` driver when MAIL_MAILER is absent, which
+   * accepts every message, writes it to a file and reports success — so an
+   * unconfigured server looks identical to a working one until somebody checks
+   * an inbox. False means notifications are going nowhere.
+   */
+  mailSends: boolean;
+  /** The driver's name, so the warning can say which one. */
+  mailMailer: string;
 }

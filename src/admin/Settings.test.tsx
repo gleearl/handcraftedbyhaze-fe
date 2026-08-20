@@ -10,10 +10,13 @@ vi.mock("../lib/api/admin");
 
 const mocked = vi.mocked(api);
 
+const settings = (emails: string[], mailSends = true, mailMailer = "resend") =>
+  ({ orderNotificationEmails: emails, mailSends, mailMailer });
+
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.fetchSettings.mockResolvedValue({ orderNotificationEmails: ["haze@example.com"] });
-  mocked.saveSettings.mockImplementation(async (emails) => ({ orderNotificationEmails: emails }));
+  mocked.fetchSettings.mockResolvedValue(settings(["haze@example.com"]));
+  mocked.saveSettings.mockImplementation(async (emails) => settings(emails));
   mocked.sendTestEmail.mockResolvedValue(["haze@example.com"]);
 });
 
@@ -43,9 +46,7 @@ describe("the notification address list", () => {
 
   it("removing an address takes it out of what gets saved", async () => {
     const user = userEvent.setup();
-    mocked.fetchSettings.mockResolvedValue({
-      orderNotificationEmails: ["haze@example.com", "helper@example.com"],
-    });
+    mocked.fetchSettings.mockResolvedValue(settings(["haze@example.com", "helper@example.com"]));
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /remove haze@example.com/i }));
@@ -56,7 +57,7 @@ describe("the notification address list", () => {
   });
 
   it("says plainly that notifications are off when nobody is listed", async () => {
-    mocked.fetchSettings.mockResolvedValue({ orderNotificationEmails: [] });
+    mocked.fetchSettings.mockResolvedValue(settings([]));
     renderPage();
 
     expect(await screen.findByText(/no.*order.*(won't|will not).*email|notifications are off/i))
@@ -121,5 +122,23 @@ describe("the test email", () => {
 
     await waitFor(() => expect(testButton()).toBeEnabled());
     expect(mocked.sendTestEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("a server that cannot actually send", () => {
+  it("warns before anything is clicked, naming the driver", async () => {
+    mocked.fetchSettings.mockResolvedValue(settings(["haze@example.com"], false, "log"));
+    renderPage();
+
+    const warning = await screen.findByRole("alert");
+    expect(warning).toHaveTextContent(/log/);
+    expect(warning).toHaveTextContent(/being sent/i);
+    expect(warning).toHaveTextContent(/log file/i);
+  });
+
+  it("says nothing when mail is configured properly", async () => {
+    renderPage();
+    await screen.findByDisplayValue("haze@example.com");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

@@ -128,6 +128,21 @@ export function Settings() {
           stay behind this login.
         </p>
 
+        {data && !data.mailSends && (
+          <div
+            role="alert"
+            className="mb-5 rounded-card border border-danger bg-danger-bg px-4 py-3.5
+                       text-[.9375rem] text-danger"
+          >
+            <strong className="font-semibold">Nothing is actually being sent.</strong>{" "}
+            This server's mail is set to the <code>{data.mailMailer}</code> driver, which
+            writes each notification to a log file and reports success. Orders will look
+            like they notified you and won't. Set <code>MAIL_MAILER</code> and{" "}
+            <code>RESEND_API_KEY</code> in the server's <code>.env</code>, then run{" "}
+            <code>php artisan config:cache</code>.
+          </div>
+        )}
+
         {draft.length === 0 ? (
           <p className="mb-5 rounded-card border border-dashed border-rule px-4 py-5
                         text-center text-[.9375rem] text-fg-muted">

@@ -184,6 +184,10 @@ const toSettings = (body: unknown): Settings => {
 
   return {
     orderNotificationEmails: Array.isArray(emails) ? emails.map(String) : [],
+    /* Absent means an older backend that can't tell us, not a broken one —
+       default to quiet rather than crying wolf about a server we can't read. */
+    mailSends: data.mail_sends !== false,
+    mailMailer: data.mail_mailer == null ? "" : String(data.mail_mailer),
   };
 };
 
