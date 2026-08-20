@@ -1,86 +1,83 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router";
-import { createProduct, fetchAdminProducts, updateProduct } from "../lib/api/admin";
+import { Link, useNavigate, useParams } from "react-router";
+import {
+  createProduct, fetchAdminProducts, fetchLibrary, updateProduct,
+} from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
-import { MAX_ADDONS, type AddonInput, type Product, type ProductInput } from "../lib/api/types";
+import { MAX_ADDONS, type AdminProduct, type LibraryAddon, type ProductInput } from "../lib/api/types";
+import { peso } from "../lib/format";
 import { Button } from "../shop/components/Button";
 import { ErrorText } from "../shop/components/ErrorText";
 import { Field, INPUT, TEXTAREA } from "../shop/components/Field";
 import { useAsync } from "./useAsync";
-import { Loading, LoadError } from "./components/ui";
+import { Loading, LoadError, Money, Tick } from "./components/ui";
 import { DRAG_HANDLE, dragLabel, useReorder, type DragProps } from "./useReorder";
-
-const emptyAddon = (slot: number): AddonInput => ({
-  slot, name: "", price: null, photo: null, image: "", removePhoto: false,
-});
-
-/* One row per extra the piece actually has, in the order the API sent them —
-   which is the order the owner arranged. No blank placeholders: a row carries
-   its own slot now, so nothing has to hold a place in the list to keep its
-   number. */
-function addonsOf(product: Product | null): AddonInput[] {
-  return (product?.addons ?? [])
-    .filter((a) => a.slot >= 0 && a.slot < MAX_ADDONS)
-    .map((a) => ({
-      slot: a.slot, name: a.name, price: a.price,
-      photo: null, image: a.image, removePhoto: false,
-    }));
-}
-
-/* The lowest number nobody is using. Reusing a freed slot is safe — the extra
-   that had it is gone from the catalogue, so a basket still holding it drops
-   it on the next read rather than picking up the newcomer's name. */
-function freeSlot(rows: AddonInput[]): number {
-  const taken = new Set(rows.map((r) => r.slot));
-  for (let n = 0; n < MAX_ADDONS; n++) if (!taken.has(n)) return n;
-  return -1;
-}
 
 const EMPTY: ProductInput = {
   name: "", price: 0, description: "",
   available: true, stock: null, max: null, freeAddons: 0, isNew: false, photo: null,
-  addons: addonsOf(null),
+  addons: [],
 };
 
 export function ProductForm() {
   const { id } = useParams<{ id: string }>();
   const isNew = !id || id === "new";
 
-  /* Editing loads the list rather than a by-id endpoint: the list is already
-     the shape we need, and it keeps the API surface one endpoint smaller. */
+  /* Both halves at once. The library is wanted on either path now — ticking
+     from it is the only way a piece gets an extra — and editing also wants the
+     piece itself, which comes out of the list rather than a by-id endpoint:
+     the list is already the shape we need, and it keeps the API surface one
+     endpoint smaller. */
   const { data, error, loading, reload } = useAsync(
-    async (signal) => (isNew ? null : await fetchAdminProducts(signal)), [id],
+    async (signal) => {
+      const [products, library] = await Promise.all([
+        isNew ? Promise.resolve<AdminProduct[]>([]) : fetchAdminProducts(signal),
+        fetchLibrary(signal),
+      ]);
+      return { products, library };
+    },
+    [id],
   );
 
-  if (!isNew && loading) return <Loading label="Loading piece…" />;
-  if (!isNew && error) return <LoadError message={error} onRetry={reload} />;
+  if (loading) return <Loading label={isNew ? "Loading extras…" : "Loading piece…"} />;
+  if (error) return <LoadError message={error} onRetry={reload} />;
 
-  const existing = isNew ? null : data?.find((p) => p.id === id) ?? null;
+  const existing = isNew ? null : data?.products.find((p) => p.id === id) ?? null;
   if (!isNew && !existing) {
     return <LoadError message="That piece doesn't exist any more." onRetry={reload} />;
   }
 
-  return <Form key={id ?? "new"} productId={existing?.id ?? null} initial={
-    existing
-      ? {
-          name: existing.name,
-          price: existing.price,
-          description: existing.description,
-          available: existing.available,
-          stock: existing.stock ?? null,
-          max: existing.max ?? null,
-          freeAddons: existing.freeAddons,
-          isNew: existing.isNew,
-          photo: null,
-          addons: addonsOf(existing),
-        }
-      : EMPTY
-  } currentImage={existing?.image ?? ""} />;
+  return <Form key={id ?? "new"} productId={existing?.id ?? null}
+    library={data?.library ?? []}
+    initial={
+      existing
+        ? {
+            name: existing.name,
+            price: existing.price,
+            description: existing.description,
+            available: existing.available,
+            stock: existing.stock ?? null,
+            max: existing.max ?? null,
+            freeAddons: existing.freeAddons,
+            isNew: existing.isNew,
+            photo: null,
+            /* Just the ids, in the order the API sent them — which is the order
+               the owner arranged. Everything else about an extra is read back
+               out of the library, so there is nothing here to fall stale. */
+            addons: existing.addons.map((a) => a.id),
+          }
+        : EMPTY
+    } currentImage={existing?.image ?? ""} />;
 }
 
 function Form({
-  productId, initial, currentImage,
-}: { productId: string | null; initial: ProductInput; currentImage: string }) {
+  productId, initial, currentImage, library,
+}: {
+  productId: string | null;
+  initial: ProductInput;
+  currentImage: string;
+  library: LibraryAddon[];
+}) {
   const navigate = useNavigate();
   const [form, setForm] = useState<ProductInput>(initial);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -130,10 +127,16 @@ function Form({
       navigate("/admin/products", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
-        // Laravel names them snake_case; the form knows them camelCase.
         const mapped: Record<string, string> = {};
         for (const [k, v] of Object.entries(err.fieldErrors)) {
-          mapped[k === "is_new" ? "isNew" : k] = v;
+          /* Laravel names them snake_case, and a refused extra arrives either
+             as `addons` or as `addons.3` for the one at fault. Both belong on
+             the picker, which shows one message — the first, because a later
+             one would overwrite the extra actually named. */
+          const field = k === "is_new" ? "isNew"
+            : k === "addons" || k.startsWith("addons.") ? "addons"
+            : k;
+          if (!(field in mapped)) mapped[field] = v;
         }
         setFieldErrors(mapped);
       } else {
@@ -232,10 +235,10 @@ function Form({
         <fieldset className="mt-1 mb-5 border-0 p-0">
           <legend className="mb-1 font-display text-[1.0625rem] font-semibold">Extras</legend>
           <p className="mt-0 mb-3 text-[.8125rem] text-fg-muted">
-            Up to ten things this piece can be ordered with — a flower, a gift box. Give it
-            any and its <b>+</b> becomes an <b>Add</b> button that asks first. A blank price
-            means free, and dragging a row by its handle changes the order the picker
-            lists them in.
+            Up to twenty things this piece can be ordered with — a flower, a gift box. Give it
+            any and its <b>+</b> becomes an <b>Add</b> button that asks first. Extras are shared:
+            editing one on the <b>Extras</b> screen changes it on every piece that offers it.
+            Dragging a row by its handle changes the order the picker lists them in.
           </p>
 
           <Field label="Free extras" htmlFor="p-free-addons" optional
@@ -251,27 +254,21 @@ function Form({
             />
           </Field>
 
+          {/* The server refuses a twenty-first extra and names it, so this is
+              the message rather than a generic one. */}
+          <ErrorText>{fieldErrors.addons}</ErrorText>
+
           <AddonRows
-            rows={form.addons}
-            errors={fieldErrors}
-            onChange={(rows) => set("addons", rows)}
+            chosen={form.addons}
+            library={library}
+            onChange={(ids) => set("addons", ids)}
           />
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-3">
-            {form.addons.length < MAX_ADDONS && (
-              <Button
-                type="button" variant="ghost" size="sm"
-                onClick={() => set("addons", [...form.addons, emptyAddon(freeSlot(form.addons))])}
-              >
-                {form.addons.length ? "Add another extra" : "Add an extra"}
-              </Button>
-            )}
-            <span className="text-[.8125rem] text-fg-muted">
-              {form.addons.length === MAX_ADDONS
-                ? `All ${MAX_ADDONS} extras are in use.`
-                : `${form.addons.length} of ${MAX_ADDONS}`}
-            </span>
-          </div>
+          <p className="mt-2.5 mb-0 text-[.8125rem] text-fg-muted">
+            {form.addons.length === MAX_ADDONS
+              ? `All ${MAX_ADDONS} extras are in use.`
+              : `${form.addons.length} of ${MAX_ADDONS}`}
+          </p>
         </fieldset>
 
         <ErrorText>{formError}</ErrorText>
@@ -290,138 +287,152 @@ function Form({
   );
 }
 
-/* The list of extras. The dragging itself lives in useReorder, which the
-   products list uses too — what's local here is only that a moved row is not
-   saved until the form is. */
+/* The extras this piece offers, and the rest of the library underneath.
+   Nothing here edits an extra: the name, the price and the photo belong to the
+   library and are shared, so this screen only chooses which ones and in what
+   order. Editing one is a link away, and says out loud that it changes
+   everywhere. */
 function AddonRows({
-  rows, errors, onChange,
+  chosen, library, onChange,
 }: {
-  rows: AddonInput[];
-  errors: Record<string, string>;
-  onChange: (rows: AddonInput[]) => void;
+  chosen: number[];
+  library: LibraryAddon[];
+  onChange: (ids: number[]) => void;
 }) {
-  const { rowRef, drag } = useReorder(rows, onChange);
+  /* Reordering the ids themselves, not the entries they name: the ids are what
+     gets saved, and the arrangement is the whole of what this drag changes. */
+  const { rowRef, drag } = useReorder(chosen, onChange);
+
+  const byId = new Map(library.map((entry) => [entry.id, entry]));
+  const rest = library.filter((entry) => !chosen.includes(entry.id));
 
   return (
-    <div className="grid gap-2.5">
-      {rows.map((addon, i) => (
-        <AddonFields
-          /* Keyed by slot, not by index: dragging changes a row's index, and
-             keying on that would remount the inputs mid-drag and drop focus. */
-          key={addon.slot}
-          rowRef={rowRef(i)}
-          index={i}
-          count={rows.length}
-          addon={addon}
-          drag={drag(i)}
-          error={errors[`addons.${i}.name`] ?? errors[`addons.${i}.price`]}
-          onChange={(patch) => onChange(rows.map((a, n) => (n === i ? { ...a, ...patch } : a)))}
-          onRemove={() => onChange(rows.filter((_, n) => n !== i))}
-        />
-      ))}
-    </div>
+    <>
+      {chosen.length > 0 && (
+        <div className="grid gap-2">
+          {chosen.map((id, index) => {
+            const entry = byId.get(id);
+            /* Offered by the piece but gone from the library — someone deleted
+               it on the Extras screen while this form sat open. There is no
+               name or price to draw a row with, and it keeps its place in the
+               list so the index every other row drags on stays right. */
+            if (!entry) return null;
+
+            return (
+              <AddonRow
+                /* Keyed by the library id: dragging changes a row's index, and
+                   keying on that would remount the row mid-drag and drop focus. */
+                key={id}
+                entry={entry}
+                index={index}
+                count={chosen.length}
+                rowRef={rowRef(index)}
+                drag={drag(index)}
+                onRemove={() => onChange(chosen.filter((n) => n !== id))}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {chosen.length < MAX_ADDONS && (
+        <div className="mt-3">
+          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="m-0 text-xs font-semibold uppercase tracking-[.12em] text-fg-muted">
+              {chosen.length ? "Also in the library" : "In the library"}
+            </h3>
+            {/* Here rather than only on the Extras screen: needing one the
+                library hasn't got is something you find out while filling this
+                in, and sending the owner off to hunt for the other screen is
+                how a piece gets saved without the extra it wanted. */}
+            <Link to="/admin/extras/new"
+                  className="text-[.8125rem] font-semibold text-fg-brand no-underline">
+              New extra
+            </Link>
+          </div>
+
+          {rest.length === 0 ? (
+            <p className="m-0 text-[.8125rem] text-fg-muted">
+              {library.length === 0
+                ? "Nothing in the library yet — add one and every piece can offer it."
+                : "This piece offers everything in the library."}
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {rest.map((entry) => (
+                <Tick
+                  key={entry.id} id={`p-addon-${entry.id}`} label={entry.name}
+                  // A free extra says so in words — "₱0" reads like a price nobody set.
+                  sub={entry.price === 0 ? "Free" : peso(entry.price)}
+                  /* Never ticked: ticking one moves it up into the arranged
+                     list above, which is where it can be dragged and where the
+                     × takes it off again. Two ticked states for the same extra
+                     would be two answers to one question. */
+                  checked={false}
+                  onChange={() => onChange([...chosen, entry.id])}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
-/* One extra. The number on it is where it sits in the list, not its slot — the
-   slot is an identity a customer's open basket depends on, and it would mean
-   nothing to the person filling this in. */
-function AddonFields({
-  index, count, addon, error, rowRef, drag, onChange, onRemove,
+/* One extra this piece offers. The number on it is where it sits in the
+   customer's picker, which is the only thing about it this screen decides. */
+function AddonRow({
+  entry, index, count, rowRef, drag, onRemove,
 }: {
+  entry: LibraryAddon;
   index: number;
   count: number;
-  addon: AddonInput;
-  error?: string;
   rowRef: (el: HTMLDivElement | null) => void;
   drag: DragProps;
-  onChange: (patch: Partial<AddonInput>) => void;
   onRemove: () => void;
 }) {
-  const shown = addon.photo ? URL.createObjectURL(addon.photo)
-    : addon.removePhoto ? "" : addon.image;
-  const named = addon.name.trim() || `Extra ${index + 1}`;
-
   return (
     <div
       ref={rowRef}
-      className={`rounded-sm border bg-surface-brand-soft/40 p-3
+      className={`flex items-center gap-2 rounded-sm border bg-surface p-2
                   ${drag.active ? "border-selected shadow-card" : "border-rule"}`}
     >
-      <div className="flex flex-wrap items-end gap-2.5">
-        <button
-          type="button"
-          aria-label={dragLabel(named, index, count)}
-          {...drag.handle}
-          className={`mb-1.5 ${DRAG_HANDLE}`}
-        >
-          <span aria-hidden="true" className="text-base leading-none">⠿</span>
-        </button>
+      <button
+        type="button"
+        aria-label={dragLabel(entry.name, index, count)}
+        {...drag.handle}
+        className={DRAG_HANDLE}
+      >
+        <span aria-hidden="true" className="text-base leading-none">⠿</span>
+      </button>
 
-        <label className="min-w-0 flex-1 text-[.8125rem]">
-          <span className="mb-1 block text-fg-muted">Extra {index + 1}</span>
-          <input
-            type="text" value={addon.name} placeholder="Name it"
-            onChange={(e) => onChange({ name: e.target.value })}
-            className={INPUT}
-          />
-        </label>
-        <label className="w-28 text-[.8125rem]">
-          <span className="mb-1 block text-fg-muted">Adds (₱)</span>
-          <input
-            type="number" inputMode="numeric" min={0} value={addon.price ?? ""}
-            placeholder="Free"
-            onChange={(e) => {
-              const n = Math.floor(Number(e.target.value.trim()));
-              onChange({ price: e.target.value.trim() === "" || !Number.isFinite(n) || n < 0 ? null : n });
-            }}
-            className={INPUT}
-          />
-        </label>
+      {entry.image
+        ? <img src={entry.image} alt=""
+               className="size-10 flex-none rounded-xs bg-surface-brand-soft object-cover" />
+        : <div className="size-10 flex-none rounded-xs bg-surface-brand-soft" />}
 
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${named}`}
-          className="mb-1.5 grid size-9 flex-none cursor-pointer place-items-center rounded-xs
-                     text-lg leading-none text-fg-muted hover:bg-surface
-                     focus-visible:outline-2 focus-visible:outline-offset-2
-                     focus-visible:outline-focus-ring"
-        >
-          ×
-        </button>
+      <div className="min-w-0 flex-1">
+        <p className="m-0 truncate font-semibold">{entry.name}</p>
+        <p className="m-0 truncate text-[.8125rem] text-fg-muted">
+          {entry.price === 0 ? "Free" : <Money amount={entry.price} />}
+        </p>
       </div>
 
-      {/* Always here. It used to appear only once the extra had a name, which
-          saved a line of markup and cost the one thing the row is for: with
-          nothing typed yet there was no file input on screen at all, and no
-          way to tell that from a photo field that doesn't work. */}
-      <div className="mt-2.5 flex items-center gap-2.5">
-        {shown && (
-          <img src={shown} alt=""
-               className="size-10 flex-none rounded-xs bg-surface object-cover" />
-        )}
-        {/* Labelled, because a bare file input announces itself as "Choose
-            file" and nothing else — on a form with one of these per extra
-            that names none of them. */}
-        <input
-          type="file" accept="image/*"
-          aria-label={`Photo for ${named}`}
-          onChange={(e) => onChange({ photo: e.target.files?.[0] ?? null, removePhoto: false })}
-          className="min-w-0 flex-1 text-xs"
-        />
-        {shown && !addon.photo && (
-          <button
-            type="button"
-            onClick={() => onChange({ removePhoto: true })}
-            className="shrink-0 cursor-pointer text-xs text-fg-muted underline"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-
-      {error && <ErrorText>{error}</ErrorText>}
+      {/* "Take off", not "delete": the extra stays in the library and on every
+          other piece offering it, and the label is the only place that
+          difference can be said before the press rather than after. */}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Take ${entry.name} off this piece`}
+        className="grid size-9 flex-none cursor-pointer place-items-center rounded-xs
+                   text-lg leading-none text-fg-muted hover:bg-surface
+                   focus-visible:outline-2 focus-visible:outline-offset-2
+                   focus-visible:outline-focus-ring"
+      >
+        ×
+      </button>
     </div>
   );
 }
