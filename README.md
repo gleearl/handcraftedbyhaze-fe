@@ -191,6 +191,7 @@ to discover which accounts exist.
 | `PATCH /api/admin/orders/{id}` | `{status}` |
 | *(whatever `receipt_url` points at)* | Streams the image, auth-gated |
 | `GET/POST /api/admin/products` | List / create |
+| `PATCH /api/admin/products/order` | `{ids: [...]}` — the new display order |
 | `POST /api/admin/products/{id}` | Update, with `_method=PATCH` |
 | `DELETE /api/admin/products/{id}` | Archive |
 
@@ -201,6 +202,13 @@ The frontend never builds the receipt path itself — it renders whatever
 `receipt_url` the order detail returns, so you choose the route (something like
 `/api/admin/orders/{id}/receipt`). Whatever it is, **it must require the session**;
 returning a public storage URL here is the one mistake that leaks receipts.
+
+`/products/order` has to be matched before `/products/{id}`, or `order` is read
+as a slug. It takes every live piece's id, top to bottom, and gives each the
+position of its index; ids it isn't sent keep the position they had, which is
+how archived pieces — listed apart in the admin, and never listed at all in the
+shop — stay out of it. The admin saves on drop and puts the list back if the
+save fails, so the order on screen is always the order the shop is in.
 
 Product writes are multipart because they carry a photo, and updates are sent as
 `POST` with a `_method=PATCH` field — PHP does not parse a multipart body on a

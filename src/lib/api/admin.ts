@@ -152,6 +152,14 @@ export async function updateProduct(id: string, input: ProductInput): Promise<vo
   });
 }
 
+/**
+ * The new arrangement, top to bottom. Only the ids sent move — the archived
+ * pieces the list shows apart aren't arrangeable and keep where they were.
+ */
+export async function reorderProducts(ids: string[]): Promise<void> {
+  await request<unknown>("/api/admin/products/order", { method: "PATCH", body: { ids } });
+}
+
 /** Archive, not delete — past orders still name this piece. */
 export async function archiveProduct(id: string): Promise<void> {
   await request<unknown>(`/api/admin/products/${id}`, { method: "DELETE" });

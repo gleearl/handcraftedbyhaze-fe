@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { createProduct, fetchAdminProducts, updateProduct } from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
@@ -8,6 +8,7 @@ import { ErrorText } from "../shop/components/ErrorText";
 import { Field, INPUT, TEXTAREA } from "../shop/components/Field";
 import { useAsync } from "./useAsync";
 import { Loading, LoadError } from "./components/ui";
+import { DRAG_HANDLE, dragLabel, useReorder, type DragProps } from "./useReorder";
 
 const emptyAddon = (slot: number): AddonInput => ({
   slot, name: "", price: null, photo: null, image: "", removePhoto: false,
@@ -33,14 +34,6 @@ function freeSlot(rows: AddonInput[]): number {
   const taken = new Set(rows.map((r) => r.slot));
   for (let n = 0; n < MAX_ADDONS; n++) if (!taken.has(n)) return n;
   return -1;
-}
-
-/** Move one row to another index, keeping every slot exactly where it was. */
-function moveRow(rows: AddonInput[], from: number, to: number): AddonInput[] {
-  const next = [...rows];
-  const [row] = next.splice(from, 1);
-  if (row) next.splice(to, 0, row);
-  return next;
 }
 
 const EMPTY: ProductInput = {
@@ -297,15 +290,9 @@ function Form({
   );
 }
 
-/* The list of extras, and the reordering that goes with it.
-
-   Pointer events rather than HTML5 drag-and-drop: that API never fires on
-   touch, and this admin is used on a phone. One set of handlers covers mouse,
-   pen and finger, and `touch-action: none` on the handle is what stops the
-   page scrolling out from under a drag.
-
-   The arrow keys move a row too. A handle that only answers to dragging is one
-   a keyboard can't reach at all, and it costs four lines not to have that. */
+/* The list of extras. The dragging itself lives in useReorder, which the
+   products list uses too — what's local here is only that a moved row is not
+   saved until the form is. */
 function AddonRows({
   rows, errors, onChange,
 }: {
@@ -313,50 +300,7 @@ function AddonRows({
   errors: Record<string, string>;
   onChange: (rows: AddonInput[]) => void;
 }) {
-  const [dragging, setDragging] = useState<number | null>(null);
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
-
-  /* Hit-test the rows themselves rather than assume a row height: one with a
-     photo on it is taller than one without, and a guessed height drops the row
-     in the wrong place exactly when the list is worth reordering. */
-  const rowUnder = (y: number): number =>
-    refs.current.findIndex((el) => {
-      if (!el) return false;
-      const box = el.getBoundingClientRect();
-      return y >= box.top && y <= box.bottom;
-    });
-
-  const drag = (i: number) => ({
-    active: dragging === i,
-    onPointerDown: (e: PointerEvent<HTMLElement>) => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setDragging(i);
-    },
-    onPointerMove: (e: PointerEvent<HTMLElement>) => {
-      if (dragging === null) return;
-      const over = rowUnder(e.clientY);
-      // Reordered as the pointer crosses into a row, so what you see while
-      // dragging is already the order you'll get when you let go.
-      if (over >= 0 && over !== dragging) {
-        onChange(moveRow(rows, dragging, over));
-        setDragging(over);
-      }
-    },
-    onPointerUp: (e: PointerEvent<HTMLElement>) => {
-      if (dragging === null) return;
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      setDragging(null);
-    },
-    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
-      const to = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
-      if (to < 0 || to >= rows.length) return;
-      e.preventDefault();
-      onChange(moveRow(rows, i, to));
-      // Keep the handle under the finger that's still pressing the key.
-      requestAnimationFrame(() => refs.current[to]?.querySelector("button")?.focus());
-    },
-  });
+  const { rowRef, drag } = useReorder(rows, onChange);
 
   return (
     <div className="grid gap-2.5">
@@ -365,7 +309,7 @@ function AddonRows({
           /* Keyed by slot, not by index: dragging changes a row's index, and
              keying on that would remount the inputs mid-drag and drop focus. */
           key={addon.slot}
-          rowRef={(el) => { refs.current[i] = el; }}
+          rowRef={rowRef(i)}
           index={i}
           count={rows.length}
           addon={addon}
@@ -390,13 +334,7 @@ function AddonFields({
   addon: AddonInput;
   error?: string;
   rowRef: (el: HTMLDivElement | null) => void;
-  drag: {
-    active: boolean;
-    onPointerDown: (e: PointerEvent<HTMLElement>) => void;
-    onPointerMove: (e: PointerEvent<HTMLElement>) => void;
-    onPointerUp: (e: PointerEvent<HTMLElement>) => void;
-    onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
-  };
+  drag: DragProps;
   onChange: (patch: Partial<AddonInput>) => void;
   onRemove: () => void;
 }) {
@@ -413,14 +351,9 @@ function AddonFields({
       <div className="flex flex-wrap items-end gap-2.5">
         <button
           type="button"
-          aria-label={`Move ${named}, ${index + 1} of ${count}. Drag, or use the arrow keys.`}
-          {...drag}
-          /* touch-none: without it the browser claims the gesture as a scroll
-             and the row never moves on a phone. */
-          className="mb-1.5 grid size-9 flex-none cursor-grab touch-none place-items-center
-                     rounded-xs text-fg-muted select-none active:cursor-grabbing
-                     hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2
-                     focus-visible:outline-focus-ring"
+          aria-label={dragLabel(named, index, count)}
+          {...drag.handle}
+          className={`mb-1.5 ${DRAG_HANDLE}`}
         >
           <span aria-hidden="true" className="text-base leading-none">⠿</span>
         </button>
