@@ -9,7 +9,7 @@ import { Button } from "../shop/components/Button";
 import { ErrorText } from "../shop/components/ErrorText";
 import { Field, INPUT } from "../shop/components/Field";
 import { useAsync } from "./useAsync";
-import { Loading, LoadError } from "./components/ui";
+import { Loading, LoadError, Tick } from "./components/ui";
 import { usedLabel } from "./Extras";
 
 const EMPTY: AddonFormInput = {
@@ -89,6 +89,12 @@ function Form({
      press of Save from adding the same extra to the library twice. */
   const [savedId, setSavedId] = useState<number | null>(addonId);
 
+  /* Set when the entry itself went in but its pieces didn't. A two-call save
+     can stop between the two, and the half that already happened is invisible
+     otherwise — the owner reads the error on the tick list as "nothing saved"
+     and walks away from a name and price that are live in the shop. */
+  const [piecesUnsaved, setPiecesUnsaved] = useState(false);
+
   const set = <K extends keyof AddonFormInput>(key: K, value: AddonFormInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -127,15 +133,22 @@ function Form({
     if (!validate()) return;
 
     setSaving(true);
+    let committed = false;
     try {
       /* Two calls, in this order. Nothing can be ticked onto an extra that
          doesn't exist yet, so on the create path the ticks go up against the id
          the save just handed back rather than one we chose. */
       const entry = savedId ? await updateAddon(savedId, form) : await createAddon(form);
       setSavedId(entry.id);
+      committed = true;
       await setAddonProducts(entry.id, usedOn);
       navigate("/admin/extras", { replace: true });
     } catch (err) {
+      /* Sticky, and never cleared here: once the first call has gone through,
+         the pieces stay unsaved until a whole save finishes — and a later
+         attempt that fails on the first call instead hasn't undone that. */
+      if (committed) setPiecesUnsaved(true);
+
       if (err instanceof ApiError && err.status === 422) {
         const mapped: Record<string, string> = {};
         for (const [key, message] of Object.entries(err.fieldErrors)) {
@@ -166,8 +179,12 @@ function Form({
 
   return (
     <>
+      {/* savedId, not the prop: a create whose second call failed has left a real
+          entry in the library, and from that moment on this screen is editing it
+          — calling itself "Add an extra" would be a straight lie about what the
+          next press does. */}
       <h1 className="mb-5 font-display text-2xl font-semibold leading-[1.3]">
-        {addonId ? "Edit extra" : "Add an extra"}
+        {savedId ? "Edit extra" : "Add an extra"}
       </h1>
 
       <form onSubmit={onSubmit} noValidate>
@@ -221,6 +238,15 @@ function Form({
             after the extras it already has, so nothing you arranged on a piece moves.
           </p>
 
+          {piecesUnsaved && (
+            <p role="status"
+               className="mt-0 mb-2 rounded-sm border border-brand bg-surface-brand-soft
+                          px-3 py-2.5 text-[.8125rem] text-fg-brand">
+              The extra is saved. These pieces aren't set yet — press Save changes
+              again to finish, or leave now and the extra stays as it is, on nothing new.
+            </p>
+          )}
+
           {/* The server refuses a piece already offering all twenty and names it, so
               this is the message rather than a generic one. */}
           <ErrorText>{fieldErrors.products}</ErrorText>
@@ -265,7 +291,7 @@ function Form({
 
         <div className="mt-2 flex gap-2.5">
           <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : addonId ? "Save changes" : "Add extra"}
+            {saving ? "Saving…" : savedId ? "Save changes" : "Add extra"}
           </Button>
           <Button type="button" variant="ghost" onClick={() => navigate("/admin/extras")}>
             Cancel
@@ -273,28 +299,5 @@ function Form({
         </div>
       </form>
     </>
-  );
-}
-
-function Tick({
-  id, label, sub, checked, onChange,
-}: {
-  id: string; label: string; sub?: string; checked: boolean; onChange: (on: boolean) => void;
-}) {
-  return (
-    <label htmlFor={id}
-           className="flex cursor-pointer items-center gap-3 rounded-sm border border-field
-                      bg-surface px-4 py-3 has-checked:border-selected has-checked:bg-surface-brand-soft">
-      <input
-        type="checkbox" id={id} checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        /* accent-color moss-600 — moss-500 is under 3:1 */
-        className="size-[22px] flex-none accent-moss-600"
-      />
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate font-semibold">{label}</span>
-        {sub && <span className="text-[.8125rem] text-fg-muted">{sub}</span>}
-      </span>
-    </label>
   );
 }

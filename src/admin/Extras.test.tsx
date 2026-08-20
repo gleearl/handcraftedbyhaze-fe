@@ -45,6 +45,17 @@ describe("the library of extras", () => {
     expect(screen.getByRole("button", { name: /Delete everywhere/i })).toBeInTheDocument();
   });
 
+  /* Pressing Delete unmounts the button that was pressed. Without somewhere to
+     put the keyboard, the owner is dropped on <body> mid-decision. */
+  it("puts the keyboard on the safe answer when it asks", async () => {
+    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant"] }]);
+    renderExtras();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Delete Gift box/i }));
+
+    expect(screen.getByRole("button", { name: /Keep it/i })).toHaveFocus();
+  });
+
   /* The asking is only worth anything if the answer is honoured, and if saying
      no leaves the extra exactly where it was. */
   it("deletes only once the second button is pressed", async () => {

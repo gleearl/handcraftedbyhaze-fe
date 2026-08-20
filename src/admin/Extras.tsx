@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { deleteAddon, fetchLibrary } from "../lib/api/admin";
 import { ApiError, GENERIC_ERROR } from "../lib/api/http";
@@ -103,6 +103,14 @@ function Row({
   onDelete: () => void;
 }) {
   const count = entry.usedOn.length;
+  const keepRef = useRef<HTMLButtonElement>(null);
+
+  /* Asking inline costs what window.confirm gave away for free. Pressing Delete
+     unmounts the button that was pressed, so without this the keyboard lands on
+     <body> and the owner loses their place in the middle of the decision. It
+     goes to "Keep it" rather than to the delete: the safe answer is the one that
+     should be under the finger. */
+  useEffect(() => { if (asking) keepRef.current?.focus(); }, [asking]);
 
   return (
     <div
@@ -121,8 +129,8 @@ function Row({
              count is the one thing that makes that consequence visible before
              it happens. It stands in for the usual line rather than sitting
              under it: the price is not what the owner is deciding about. */
-          <p className="m-0 text-[.8125rem] text-fg-muted">
-            {usedLabel(count)}.{" "}
+          <p role="alert" className="m-0 text-[.8125rem] text-fg-muted">
+            Delete {entry.name}? It's {usedLabel(count)}.{" "}
             {count > 0
               ? `This removes it from ${count === 1 ? "it" : "them"}.`
               : "Nothing else changes."}
@@ -140,7 +148,10 @@ function Row({
           <button type="button" onClick={onDelete} disabled={busy} className={ROW_DANGER}>
             {busy ? "Deleting…" : "Delete everywhere"}
           </button>
-          <button type="button" onClick={onKeep} disabled={busy} className={ROW_ACTION}>
+          <button
+            type="button" ref={keepRef} onClick={onKeep} disabled={busy}
+            className={ROW_ACTION}
+          >
             Keep it
           </button>
         </>

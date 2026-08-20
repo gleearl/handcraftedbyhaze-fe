@@ -1,6 +1,7 @@
 /* Small shared pieces for the admin screens. The shop's Button, Field, and
    ErrorText are reused directly — these are only the things the shop has no
-   equivalent for: status pills, page chrome, and async state. */
+   equivalent for: status pills, page chrome, async state, and the tick row that
+   both halves of the extras feature put a list of pieces into. */
 
 import type { ReactNode } from "react";
 import { peso } from "../../lib/format";
@@ -76,4 +77,37 @@ export function LoadError({ message, onRetry }: { message: string; onRetry: () =
    four-column table would need horizontal scrolling to say very little. */
 export function CardList({ children }: { children: ReactNode }) {
   return <ul className="m-0 grid list-none gap-2.5 p-0">{children}</ul>;
+}
+
+
+/* One row of a checkbox list — a piece to tick, an extra to tick. It lives here
+   rather than beside either list because both halves of the extras feature need
+   it: the library form ticks pieces onto an extra, and the product form ticks
+   extras onto a piece. The same control for what is really the same question,
+   asked from the two ends. */
+export function Tick({
+  id, label, sub, checked, onChange,
+}: {
+  id: string;
+  label: string;
+  sub?: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id}
+           className="flex cursor-pointer items-center gap-3 rounded-sm border border-field
+                      bg-surface px-4 py-3 has-checked:border-selected has-checked:bg-surface-brand-soft">
+      <input
+        type="checkbox" id={id} checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        /* accent-color moss-600 — moss-500 is under 3:1 */
+        className="size-[22px] flex-none accent-moss-600"
+      />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-semibold">{label}</span>
+        {sub && <span className="text-[.8125rem] text-fg-muted">{sub}</span>}
+      </span>
+    </label>
+  );
 }
