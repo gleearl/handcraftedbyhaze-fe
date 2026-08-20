@@ -22,9 +22,12 @@ const CATALOGUE: Product[] = [{
 }, {
   id: "n-sc", name: "Personalized Croissant", price: 175, image: "",
   description: "", available: true, isNew: false, freeAddons: 0,
+  /* Library ids, not positions — deliberately not 0/1 so a positional bug
+     would fail loudly, and never 0 because that is the value sanitizeCart
+     treats as unreadable. */
   addons: [
-    { id: 0, name: "Pink flower", price: 40, image: "" },
-    { id: 1, name: "Gift box", price: 50, image: "" },
+    { id: 21, name: "Pink flower", price: 40, image: "" },
+    { id: 34, name: "Gift box", price: 50, image: "" },
   ],
 }];
 
@@ -44,7 +47,7 @@ function Probe() {
       <button onClick={() => goTo(STEPS.indexOf("done"))}>to-done</button>
       <button onClick={() => dispatch({ type: "adjust", id: "p-c", key: "p-c", act: "inc" })}>add</button>
       <button onClick={() => dispatch({ type: "openPicker", id: "n-sc", key: "" })}>pick</button>
-      <button onClick={() => dispatch({ type: "commitPick", extras: [0] })}>confirm-flower</button>
+      <button onClick={() => dispatch({ type: "commitPick", extras: [21] })}>confirm-flower</button>
       <button onClick={() => dispatch({ type: "commitPick", extras: [] })}>confirm-plain</button>
     </div>
   );
@@ -134,7 +137,7 @@ describe("choosing extras", () => {
     click("pick");
     click("confirm-flower");
 
-    expect(saved().cart).toEqual({ "n-sc::0": line("n-sc", [0], 1) });
+    expect(saved().cart).toEqual({ "n-sc::21": line("n-sc", [21], 1) });
   });
 
   it("holds the same piece twice when the extras differ", () => {
@@ -143,7 +146,7 @@ describe("choosing extras", () => {
     click("pick"); click("confirm-plain");
 
     expect(saved().cart).toEqual({
-      "n-sc::0": line("n-sc", [0], 1),
+      "n-sc::21": line("n-sc", [21], 1),
       "n-sc": line("n-sc", [], 1),
     });
   });
@@ -153,7 +156,7 @@ describe("choosing extras", () => {
     click("pick"); click("confirm-flower");
     click("pick"); click("confirm-flower");
 
-    expect(saved().cart).toEqual({ "n-sc::0": line("n-sc", [0], 2) });
+    expect(saved().cart).toEqual({ "n-sc::21": line("n-sc", [21], 2) });
   });
 
   it("drops a v1 cart rather than half-reading it into the new shape", () => {
