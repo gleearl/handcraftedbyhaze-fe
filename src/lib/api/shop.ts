@@ -13,20 +13,16 @@ const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
 
-/* Kept in the order the API sent them, which is slot order. Each carries its
-   own slot, so dropping an unusable one here can't renumber the rest — a cart
-   keys its extras by slot, not by where they happen to sit in this list. */
 function toAddons(raw: unknown): Addon[] {
   if (!Array.isArray(raw)) return [];
 
-  return raw.map((value, i) => {
+  return raw.map((value) => {
     const a = (value ?? {}) as Record<string, unknown>;
     const price = Math.round(Number(a.price));
-    const slot = Math.floor(Number(a.slot));
+    const id = Math.floor(Number(a.id));
 
     return {
-      // Falling back to position keeps an API that doesn't send slots working.
-      slot: Number.isInteger(slot) && slot >= 0 ? slot : i,
+      id: Number.isInteger(id) && id > 0 ? id : 0,
       name: String(a.name ?? "").trim(),
       // A blank or unreadable price is a free extra, which is a real thing to
       // want — "add a handwritten note" costs nothing.
@@ -34,10 +30,11 @@ function toAddons(raw: unknown): Addon[] {
       image: normalizeImage(String(a.image ?? "")),
     };
   })
-    // An unnamed slot isn't something anyone can choose, and two extras on the
-    // same slot would make a cart key ambiguous.
-    .filter((a, i, all) => a.name !== "" && a.slot < MAX_ADDONS
-      && all.findIndex((b) => b.slot === a.slot) === i)
+    /* An unnamed extra isn't something anyone can choose, an id of 0 is one we
+       couldn't read, and two rows on one id would make a cart key ambiguous. */
+    .filter((a, i, all) => a.name !== "" && a.id > 0
+      && all.findIndex((b) => b.id === a.id) === i)
+    // The catalogue is what caps a piece, not us — but never render past it.
     .slice(0, MAX_ADDONS);
 }
 

@@ -8,10 +8,11 @@
 
 /** An extra a piece can be ordered with — a flower on a croissant, a gift box. */
 export interface Addon {
-  /* Which slot this is. Carried rather than inferred from position: a cart
-     line keys its extras by slot, so emptying a middle slot must not shift the
-     later ones onto different numbers. */
-  slot: number;
+  /* The library's id, and what a cart line keys its extras by. It replaced a
+     per-product slot because an extra taken off one piece stays in the library
+     — a number that could be handed on would rename the extra in a basket
+     somebody has open. An id means one extra, permanently. */
+  id: number;
   name: string;
   /** Pesos, on top of the piece's own price. 0 renders as "Free". */
   price: number;
@@ -19,8 +20,14 @@ export interface Addon {
   image: string;
 }
 
-/** Ten slots at most: ten rows in the picker, ten sets of columns in the sheet. */
-export const MAX_ADDONS = 10;
+/** An extra as the admin manages it: the shop's view plus who is offering it. */
+export interface LibraryAddon extends Addon {
+  /** Ids of the pieces currently offering this extra. */
+  usedOn: string[];
+}
+
+/** The most extras one piece may offer. The library itself is unbounded. */
+export const MAX_ADDONS = 20;
 
 export interface Product {
   /** Unique, and never changes once orders exist. */
@@ -119,17 +126,14 @@ export interface ProductInput {
   isNew: boolean;
   /** A newly chosen file, or null to leave the existing photo alone. */
   photo: File | null;
-  /* One entry per extra, in the order to show them. An entry that isn't sent
-     is removed; its index is the position, its slot is inside it. */
-  addons: AddonInput[];
+  /* The library ids this piece offers, in the order to show them. The index is
+     the position; an extra is removed by not being sent. */
+  addons: number[];
 }
 
-export interface AddonInput {
-  /* Which extra this is, and never its place in the list — a cart keys a line
-     by the slot, so it has to survive being dragged somewhere else. */
-  slot: number;
+export interface AddonFormInput {
   name: string;
-  /** Blank means free, which is deliberately distinct from unnamed. */
+  /** Blank means free, which is deliberately distinct from unset. */
   price: number | null;
   photo: File | null;
   /** The photo it already has, so the form can show and clear it. */
