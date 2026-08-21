@@ -238,7 +238,7 @@ describe("clampCartToStock", () => {
 
   it("merges two rows that lose their extras onto the same line", () => {
     const cart = { ...one("a", [0], 1), ...one("a", [1], 2) };
-    // Both slots gone: neither row has anything left to tell them apart.
+    // Both extras gone: neither row has anything left to tell them apart.
     const { cart: next, trimmed } = clampCartToStock(cart, [make({ id: "a" })]);
 
     expect(trimmed).toBe(true);

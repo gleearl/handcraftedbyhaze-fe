@@ -79,7 +79,6 @@ export function CardList({ children }: { children: ReactNode }) {
   return <ul className="m-0 grid list-none gap-2.5 p-0">{children}</ul>;
 }
 
-
 /* One row of a checkbox list — a piece to tick, an extra to tick. It lives here
    rather than beside either list because both halves of the extras feature need
    it: the library form ticks pieces onto an extra, and the product form ticks
