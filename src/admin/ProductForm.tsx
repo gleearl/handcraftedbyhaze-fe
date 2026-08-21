@@ -27,12 +27,19 @@ export function ProductForm() {
      from it is the only way a piece gets an extra — and editing also wants the
      piece itself, which comes out of the list rather than a by-id endpoint:
      the list is already the shape we need, and it keeps the API surface one
-     endpoint smaller. */
+     endpoint smaller.
+
+     A library that won't load stops an edit outright, because the form would
+     otherwise draw an existing piece as offering nothing while still holding
+     the ids it offers — and saving that would take every extra off it. Adding
+     is different: a new piece has no extras to misdraw and they're optional
+     anyway, so null means "couldn't load" and the fieldset says so on its own
+     rather than standing between the owner and a piece they can still make. */
   const { data, error, loading, reload } = useAsync(
     async (signal) => {
       const [products, library] = await Promise.all([
         isNew ? Promise.resolve<AdminProduct[]>([]) : fetchAdminProducts(signal),
-        fetchLibrary(signal),
+        isNew ? fetchLibrary(signal).catch(() => null) : fetchLibrary(signal),
       ]);
       return { products, library };
     },
@@ -48,7 +55,7 @@ export function ProductForm() {
   }
 
   return <Form key={id ?? "new"} productId={existing?.id ?? null}
-    library={data?.library ?? []}
+    initialLibrary={data?.library ?? null}
     initial={
       existing
         ? {
@@ -71,14 +78,23 @@ export function ProductForm() {
 }
 
 function Form({
-  productId, initial, currentImage, library,
+  productId, initial, currentImage, initialLibrary,
 }: {
   productId: string | null;
   initial: ProductInput;
   currentImage: string;
-  library: LibraryAddon[];
+  /** null on the add path when the library wouldn't load. */
+  initialLibrary: LibraryAddon[] | null;
 }) {
   const navigate = useNavigate();
+
+  /* Held here rather than read straight off the prop, so the fieldset can
+     retry a library that didn't load. Going back through the page-level reload
+     would unmount this form while it refetched and throw away everything
+     already typed into it, which is the thing not blocking the add path was
+     for in the first place. */
+  const [library, setLibrary] = useState(initialLibrary);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [form, setForm] = useState<ProductInput>(initial);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -144,6 +160,19 @@ function Form({
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  /* Failure leaves it null, which is what the notice is already saying — there
+     is no second, louder way to say the same thing that would help. */
+  async function retryLibrary() {
+    setLoadingLibrary(true);
+    try {
+      setLibrary(await fetchLibrary());
+    } catch {
+      setLibrary(null);
+    } finally {
+      setLoadingLibrary(false);
     }
   }
 
@@ -254,21 +283,45 @@ function Form({
             />
           </Field>
 
-          {/* The server refuses a twenty-first extra and names it, so this is
-              the message rather than a generic one. */}
-          <ErrorText>{fieldErrors.addons}</ErrorText>
+          {library === null ? (
+            /* Inside the fieldset, not over the whole form: the extras are the
+               only part of this screen the library is needed for, and a piece
+               with none is a piece that saves perfectly well. */
+            <p role="status"
+               className="mt-0 mb-0 rounded-sm border border-rule bg-surface-subtle
+                          px-3 py-2.5 text-[.8125rem] text-fg-muted">
+              The list of extras couldn't be loaded, so there's nothing to tick here.
+              You can add the piece anyway and give it extras afterwards.{" "}
+              <button
+                type="button"
+                onClick={() => void retryLibrary()}
+                disabled={loadingLibrary}
+                className="cursor-pointer border-0 bg-transparent p-0 font-semibold
+                           text-fg-brand underline disabled:cursor-not-allowed
+                           disabled:opacity-50"
+              >
+                {loadingLibrary ? "Trying…" : "Try again"}
+              </button>
+            </p>
+          ) : (
+            <>
+              {/* The server refuses a twenty-first extra and names it, so this
+                  is the message rather than a generic one. */}
+              <ErrorText>{fieldErrors.addons}</ErrorText>
 
-          <AddonRows
-            chosen={form.addons}
-            library={library}
-            onChange={(ids) => set("addons", ids)}
-          />
+              <AddonRows
+                chosen={form.addons}
+                library={library}
+                onChange={(ids) => set("addons", ids)}
+              />
 
-          <p className="mt-2.5 mb-0 text-[.8125rem] text-fg-muted">
-            {form.addons.length === MAX_ADDONS
-              ? `All ${MAX_ADDONS} extras are in use.`
-              : `${form.addons.length} of ${MAX_ADDONS}`}
-          </p>
+              <p className="mt-2.5 mb-0 text-[.8125rem] text-fg-muted">
+                {form.addons.length === MAX_ADDONS
+                  ? `All ${MAX_ADDONS} extras are in use.`
+                  : `${form.addons.length} of ${MAX_ADDONS}`}
+              </p>
+            </>
+          )}
         </fieldset>
 
         <ErrorText>{formError}</ErrorText>

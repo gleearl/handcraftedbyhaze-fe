@@ -131,6 +131,14 @@ function toFormData(input: ProductInput, method?: "PATCH"): FormData {
   input.addons.forEach((id, position) => {
     data.append(`addons[${position}]`, String(id));
   });
+
+  /* Multipart has no way to spell an empty list: with nothing ticked there is
+     simply no `addons[N]` to append, and a body carrying no `addons` key at
+     all already means something else — "not editing extras, leave them as they
+     are". This marker is how the form says it meant the other thing, so
+     unticking the last extra is a request the client can actually make. */
+  if (input.addons.length === 0) data.append("addons_cleared", "1");
+
   // PHP doesn't parse a multipart body on PATCH, so Laravel reads this instead.
   if (method) data.append("_method", method);
   return data;

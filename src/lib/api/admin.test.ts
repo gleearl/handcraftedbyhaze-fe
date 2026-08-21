@@ -116,6 +116,22 @@ describe("the product form's extras", () => {
 
     expect(body.get("addons[0]")).toBe("9");
     expect(body.get("addons[1]")).toBe("3");
+    // Something is ticked, so there is nothing to mark cleared.
+    expect(body.has("addons_cleared")).toBe(false);
+  });
+
+  it("marks an empty list, which multipart can't otherwise say", async () => {
+    /* Nothing ticked means no addons[N] fields, and a body with no addons key
+       is how the API is told to leave the extras alone. Without the marker,
+       unticking the last one would save as a success and change nothing. */
+    await updateProduct("croissant", {
+      name: "Croissant", price: 175, description: "", available: true, stock: null,
+      max: null, freeAddons: 0, isNew: false, photo: null, addons: [],
+    });
+    const body = fetchMock.mock.calls.at(-1)![1].body as FormData;
+
+    expect(body.has("addons[0]")).toBe(false);
+    expect(body.get("addons_cleared")).toBe("1");
   });
 });
 

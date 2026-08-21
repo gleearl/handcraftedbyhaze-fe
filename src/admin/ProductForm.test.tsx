@@ -53,6 +53,39 @@ describe("extras on the product form", () => {
     expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ addons: [7] }));
   });
 
+  it("still adds the piece when the library wouldn't load", async () => {
+    /* Extras are optional on a new piece, so an outage here costs the tick
+       list — not the ability to make the piece at all. */
+    mocked.fetchLibrary.mockRejectedValue(new Error("down"));
+
+    renderForm("new");
+
+    expect(await screen.findByRole("button", { name: /Try again/i })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/^Name/i), "Croissant");
+    await userEvent.type(screen.getByLabelText(/Price/i), "175");
+    await userEvent.upload(screen.getByLabelText(/^Photo/i), png("piece.png"));
+    await userEvent.click(screen.getByRole("button", { name: /Add piece/i }));
+
+    await waitFor(() => expect(createProduct).toHaveBeenCalled());
+    expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ addons: [] }));
+  });
+
+  it("brings the tick list back when the retry works", async () => {
+    mocked.fetchLibrary.mockRejectedValueOnce(new Error("down"));
+    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: [] }]);
+
+    renderForm("new");
+
+    // Typed before the retry, and still here after it — the retry reloads the
+    // library, not the form.
+    await userEvent.type(await screen.findByLabelText(/^Name/i), "Croissant");
+    await userEvent.click(screen.getByRole("button", { name: /Try again/i }));
+
+    expect(await screen.findByRole("checkbox", { name: /Gift box/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Name/i)).toHaveValue("Croissant");
+  });
+
   it("counts against twenty, not ten", async () => {
     mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: [] }]);
     renderForm("new");
@@ -81,7 +114,22 @@ describe("extras on a piece that already exists", () => {
     ]);
   });
 
-  it("saves the ones still ticked, as ids in the order they sit in", async () => {
+  it("keeps the order the API sent and puts a newly ticked one last", async () => {
+    /* 9 before 7 is the arrangement the owner made — neither ascending nor the
+       order the library lists them in — so a save that reproduced either would
+       fail here. Ribbon lands after both rather than anywhere else. */
+    renderForm("croissant");
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: /Ribbon/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Save changes/i }));
+
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    expect(updateProduct).toHaveBeenCalledWith(
+      "croissant", expect.objectContaining({ addons: [9, 7, 11] }),
+    );
+  });
+
+  it("takes one off the piece without touching the library", async () => {
     renderForm("croissant");
 
     await userEvent.click(await screen.findByRole("button", { name: /Take Pink flower off/i }));
@@ -91,6 +139,7 @@ describe("extras on a piece that already exists", () => {
     expect(updateProduct).toHaveBeenCalledWith(
       "croissant", expect.objectContaining({ addons: [7] }),
     );
+    expect(mocked.deleteAddon).not.toHaveBeenCalled();
   });
 
   it("offers only the library entries this piece hasn't got", async () => {
