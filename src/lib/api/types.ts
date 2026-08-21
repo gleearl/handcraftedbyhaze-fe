@@ -48,8 +48,9 @@ export interface Product {
      ordinary case — charges for every one. */
   freeAddons: number;
   isNew: boolean;
-  /* What this piece may be ordered with, in slot order — which is the order
-     the picker lists them. Empty means the + adds it straight away. */
+  /* What this piece may be ordered with, in the order the picker lists them —
+     not any order tied to the library id. Empty means the + adds it straight
+     away. */
   addons: Addon[];
 }
 

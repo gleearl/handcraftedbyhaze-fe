@@ -33,9 +33,9 @@ describe("lineKeyFor", () => {
     expect(lineKeyFor("a", [])).toBe("a");
   });
 
-  it("sorts the slots, so the same choice is always the same line", () => {
-    expect(lineKeyFor("a", [2, 0])).toBe("a::0+2");
-    expect(lineKeyFor("a", [0, 2])).toBe("a::0+2");
+  it("sorts the ids, so the same choice is always the same line", () => {
+    expect(lineKeyFor("a", [34, 21])).toBe("a::21+34");
+    expect(lineKeyFor("a", [21, 34])).toBe("a::21+34");
   });
 
   it("round-trips through extrasFromKey", () => {
@@ -67,32 +67,32 @@ describe("cart totals", () => {
 describe("extras on a line", () => {
   const croissant = make({
     id: "c", name: "Croissant", price: 175,
-    addons: [addon(0, "Pink flower", 40), addon(1, "Handwritten note", 0), addon(2, "Gift box", 50)],
+    addons: [addon(21, "Pink flower", 40), addon(47, "Handwritten note", 0), addon(34, "Gift box", 50)],
   });
 
-  it("resolves an extra by its slot however the catalogue is ordered", () => {
+  it("resolves an extra by its id however the catalogue is ordered", () => {
     /* The owner can drag the gift box above the flower. A basket keyed
-       "c::0+2" was written before that and has to mean the same two extras
-       after it — the slot is the identity, its place in the list is not. */
+       "c::21+34" was written before that and has to mean the same two extras
+       after it — the id is the identity, its place in the list is not. */
     const rearranged = make({
       id: "c", name: "Croissant", price: 175,
-      addons: [addon(2, "Gift box", 50), addon(0, "Pink flower", 40), addon(1, "Note", 0)],
+      addons: [addon(34, "Gift box", 50), addon(21, "Pink flower", 40), addon(47, "Note", 0)],
     });
-    const [line] = cartLines(one("c", [0, 2], 1), [rearranged]);
+    const [line] = cartLines(one("c", [21, 34], 1), [rearranged]);
 
     expect(line.unit).toBe(265);
-    // …and read back in the order the picker offers them, not in slot order.
+    // …and read back in the order the picker offers them, not by id order.
     expect(line.extras.map((a) => a.name)).toEqual(["Gift box", "Pink flower"]);
   });
 
   it("adds every chosen extra to the price of one piece", () => {
-    const [line] = cartLines(one("c", [0, 2], 2), [croissant]);
+    const [line] = cartLines(one("c", [21, 34], 2), [croissant]);
     expect(line.unit).toBe(265);   // 175 + 40 + 50
     expect(line.line).toBe(530);   // the extras are per piece, so two is twice
   });
 
   it("holds the same piece twice, once plain and once with an extra", () => {
-    const cart = { ...one("c", []), ...one("c", [0], 2) };
+    const cart = { ...one("c", []), ...one("c", [21], 2) };
     const lines = cartLines(cart, [croissant]);
 
     expect(lines).toHaveLength(2);
@@ -101,28 +101,28 @@ describe("extras on a line", () => {
     expect(qtyOfProduct(cart, "c")).toBe(3);
   });
 
-  it("looks an extra up by slot, not by position", () => {
-    // Slot 1 was emptied in the admin; slot 2 must keep its own number.
-    const gapped = make({ id: "c", price: 175, addons: [addon(0, "Pink", 40), addon(2, "Box", 50)] });
-    const [line] = cartLines(one("c", [2]), [gapped]);
+  it("looks an extra up by id, not by position", () => {
+    // An id is not a position: 26 keeps its own number however many ids around it are gone.
+    const gapped = make({ id: "c", price: 175, addons: [addon(18, "Pink", 40), addon(26, "Box", 50)] });
+    const [line] = cartLines(one("c", [26]), [gapped]);
     expect(line.extras.map((a) => a.name)).toEqual(["Box"]);
   });
 
-  it("drops an extra whose slot has gone, keeping the piece", () => {
+  it("drops an extra whose id has gone, keeping the piece", () => {
     const bare = make({ id: "c", price: 175 });
-    const [line] = cartLines(one("c", [0]), [bare]);
+    const [line] = cartLines(one("c", [99]), [bare]);
     expect(line.extras).toEqual([]);
     expect(line.unit).toBe(175);
   });
 
   it("names a combination the way the picker does", () => {
     expect(extrasLabel([])).toBe("No add-on");
-    expect(extrasLabel([addon(0, "Pink flower", 40)])).toBe("With Pink flower");
-    expect(extrasLabel([addon(0, "Pink", 40), addon(1, "Box", 50)])).toBe("With Pink + Box");
+    expect(extrasLabel([addon(11, "Pink flower", 40)])).toBe("With Pink flower");
+    expect(extrasLabel([addon(11, "Pink", 40), addon(29, "Box", 50)])).toBe("With Pink + Box");
   });
 
   it("indents the extras under their piece in the order text", () => {
-    const lines = cartLines({ ...one("c", [0, 1]), ...one("c", [], 2) }, [croissant]);
+    const lines = cartLines({ ...one("c", [21, 47]), ...one("c", [], 2) }, [croissant]);
     expect(itemsAsText(lines, subtotal(lines))).toBe(
       "1 × Croissant — ₱215\n"
       + "    + Pink flower (₱40)\n"
@@ -228,8 +228,8 @@ describe("clampCartToStock", () => {
 
   it("counts every combination against the one stock number", () => {
     // Two rows of the same piece, three in total, against a stock of 2.
-    const cart = { ...one("a", [], 2), ...one("a", [0], 1) };
-    const product = make({ id: "a", stock: 2, addons: [addon(0, "Flower", 40)] });
+    const cart = { ...one("a", [], 2), ...one("a", [6], 1) };
+    const product = make({ id: "a", stock: 2, addons: [addon(6, "Flower", 40)] });
     const { cart: next, trimmed } = clampCartToStock(cart, [product]);
 
     expect(trimmed).toBe(true);
@@ -237,7 +237,7 @@ describe("clampCartToStock", () => {
   });
 
   it("merges two rows that lose their extras onto the same line", () => {
-    const cart = { ...one("a", [0], 1), ...one("a", [1], 2) };
+    const cart = { ...one("a", [6], 1), ...one("a", [17], 2) };
     // Both extras gone: neither row has anything left to tell them apart.
     const { cart: next, trimmed } = clampCartToStock(cart, [make({ id: "a" })]);
 
@@ -258,10 +258,10 @@ describe("clampCartToStock", () => {
 });
 
 describe("extras a piece includes for free", () => {
-  const flower = addon(0, "Pink flower", 40);
-  const box = addon(1, "Gift box", 50);
-  const note = addon(2, "Note", 20);
-  const gratis = addon(3, "Ribbon", 0);
+  const flower = addon(21, "Pink flower", 40);
+  const box = addon(34, "Gift box", 50);
+  const note = addon(47, "Note", 20);
+  const gratis = addon(56, "Ribbon", 0);
 
   const charged = (extras: Addon[], free: number) =>
     priceExtras(extras, free).reduce((n, e) => n + e.charged, 0);
@@ -300,7 +300,7 @@ describe("extras a piece includes for free", () => {
   });
 
   it("waives the earlier of two extras that cost the same", () => {
-    const twin = addon(4, "Twin", 40);
+    const twin = addon(63, "Twin", 40);
     expect(priceExtras([flower, twin], 1).map((e) => e.waived)).toEqual([true, false]);
   });
 
@@ -309,7 +309,7 @@ describe("extras a piece includes for free", () => {
       id: "c", price: 175, freeAddons: 2,
       addons: [flower, box, note],
     });
-    const [line] = cartLines(one("c", [0, 1, 2], 2), [croissant]);
+    const [line] = cartLines(one("c", [21, 34, 47], 2), [croissant]);
 
     expect(line.unit).toBe(195);   // 175 + ₱20, the cheapest of the three
     expect(line.line).toBe(390);   // per piece, so two of them is twice
@@ -318,7 +318,7 @@ describe("extras a piece includes for free", () => {
   it("writes a waived extra as Free, which is what the API parses back", () => {
     const croissant = make({ id: "c", name: "Croissant", price: 175, freeAddons: 2,
                              addons: [flower, box, note] });
-    const lines = cartLines(one("c", [0, 1, 2], 1), [croissant]);
+    const lines = cartLines(one("c", [21, 34, 47], 1), [croissant]);
 
     expect(itemsAsText(lines, subtotal(lines))).toBe(
       "1 × Croissant — ₱195\n"
