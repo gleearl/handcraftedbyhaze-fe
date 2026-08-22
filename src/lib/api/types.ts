@@ -22,6 +22,8 @@ export interface Addon {
 
 /** An extra as the admin manages it: the shop's view plus who is offering it. */
 export interface LibraryAddon extends Addon {
+  /** The admin's handle on this extra, e.g. "EXT-0003". Never shown publicly. */
+  code: string;
   /** Ids of the pieces currently offering this extra. */
   usedOn: string[];
 }
@@ -85,11 +87,15 @@ export interface OrderItem {
   quantity: number;
   /** Already includes the extras below — they itemise it, not add to it. */
   unitPrice: number;
-  addons: { name: string; price: number }[];
+  /** The piece's photo as it looks today; "" once it has left the catalogue. */
+  image: string;
+  addons: { name: string; price: number; image: string }[];
 }
 
 export interface OrderSummary {
   id: number;
+  /** The admin's handle on this order, e.g. "ORD-0042". Never shown publicly. */
+  code: string;
   reference: string;
   customerName: string;
   instagram: string;
@@ -112,6 +118,8 @@ export interface Order extends OrderSummary {
 /** What the admin sees: everything the shop sees, plus archived pieces. */
 export interface AdminProduct extends Product {
   archived: boolean;
+  /** The admin's handle on this piece, e.g. "PRD-0007". Never shown publicly. */
+  code: string;
 }
 
 /** The editable half of a product. `id` is absent when creating. */

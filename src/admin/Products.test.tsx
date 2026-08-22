@@ -13,6 +13,7 @@ const mocked = vi.mocked(api);
 const product = (id: string, name: string, archived = false): AdminProduct => ({
   id, name, price: 100, image: "", description: "", available: true,
   stock: undefined, max: undefined, freeAddons: 0, isNew: false, addons: [], archived,
+  code: `PRD-000${name.length}`,
 });
 
 beforeEach(() => {
@@ -102,5 +103,13 @@ describe("hiding and unhiding a piece", () => {
     await user.click((await screen.findAllByRole("button", { name: /hide bunny/i }))[0]);
 
     expect(mocked.archiveProduct).not.toHaveBeenCalled();
+  });
+});
+
+describe("codes", () => {
+  it("files each piece under a code the owner can quote", async () => {
+    renderList();
+
+    expect(await screen.findByRole("button", { name: "Copy code PRD-0005" })).toBeTruthy();
   });
 });

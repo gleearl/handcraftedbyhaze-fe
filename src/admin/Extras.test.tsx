@@ -12,6 +12,9 @@ const mocked = vi.mocked(api);
 
 const mockLibrary = (entries: LibraryAddon[]) => mocked.fetchLibrary.mockResolvedValue(entries);
 
+const entry = (over: Partial<LibraryAddon> = {}): LibraryAddon =>
+  ({ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: [], ...over });
+
 beforeEach(() => {
   vi.resetAllMocks();
   mockLibrary([]);
@@ -23,8 +26,8 @@ const renderExtras = () => render(<MemoryRouter><Extras /></MemoryRouter>);
 describe("the library of extras", () => {
   it("says how many pieces each extra is on", async () => {
     mockLibrary([
-      { id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant", "bunny"] },
-      { id: 9, name: "Anklet", price: 20, image: "", usedOn: [] },
+      { id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: ["croissant", "bunny"] },
+      { id: 9, code: "EXT-0009", name: "Anklet", price: 20, image: "", usedOn: [] },
     ]);
 
     renderExtras();
@@ -36,7 +39,7 @@ describe("the library of extras", () => {
   });
 
   it("names the count before deleting, because it comes off every piece", async () => {
-    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant", "bunny"] }]);
+    mockLibrary([{ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: ["croissant", "bunny"] }]);
     renderExtras();
 
     await userEvent.click(await screen.findByRole("button", { name: /Delete Gift box/i }));
@@ -48,7 +51,7 @@ describe("the library of extras", () => {
   /* Pressing Delete unmounts the button that was pressed. Without somewhere to
      put the keyboard, the owner is dropped on <body> mid-decision. */
   it("puts the keyboard on the safe answer when it asks", async () => {
-    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant"] }]);
+    mockLibrary([{ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: ["croissant"] }]);
     renderExtras();
 
     await userEvent.click(await screen.findByRole("button", { name: /Delete Gift box/i }));
@@ -59,7 +62,7 @@ describe("the library of extras", () => {
   /* The asking is only worth anything if the answer is honoured, and if saying
      no leaves the extra exactly where it was. */
   it("deletes only once the second button is pressed", async () => {
-    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant"] }]);
+    mockLibrary([{ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: ["croissant"] }]);
     renderExtras();
 
     await userEvent.click(await screen.findByRole("button", { name: /Delete Gift box/i }));
@@ -69,5 +72,15 @@ describe("the library of extras", () => {
     await userEvent.click(screen.getByRole("button", { name: /Delete Gift box/i }));
     await userEvent.click(screen.getByRole("button", { name: /Delete everywhere/i }));
     expect(mocked.deleteAddon).toHaveBeenCalledWith(7);
+  });
+});
+
+describe("codes", () => {
+  it("files each extra under a code the owner can quote", async () => {
+    mockLibrary([entry({ id: 7, code: "EXT-0007" })]);
+
+    renderExtras();
+
+    expect(await screen.findByRole("button", { name: "Copy code EXT-0007" })).toBeTruthy();
   });
 });

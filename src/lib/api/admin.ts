@@ -44,6 +44,7 @@ export async function logout(): Promise<void> {
 
 const toSummary = (r: Record<string, unknown>): OrderSummary => ({
   id: Number(r.id),
+  code: String(r.code ?? ""),
   reference: String(r.reference ?? ""),
   customerName: String(r.customer_name ?? r.customerName ?? r.name ?? ""),
   instagram: String(r.instagram ?? ""),
@@ -77,11 +78,15 @@ export async function fetchOrder(id: number, signal?: AbortSignal): Promise<Orde
         quantity: Number(item.quantity ?? 0),
         // Already includes the extras below — they itemise it, not add to it.
         unitPrice: Math.round(Number(item.unit_price ?? item.unitPrice ?? 0)),
+        /* Today's photo, not one taken at purchase time — replacing a piece's
+           photo deletes the old file, so the backend looks it up live. */
+        image: normalizeImage(String(item.image ?? "")),
         addons: addons.map((a) => {
           const addon = (a ?? {}) as Record<string, unknown>;
           return {
             name: String(addon.name ?? ""),
             price: Math.round(Number(addon.price ?? 0)) || 0,
+            image: normalizeImage(String(addon.image ?? "")),
           };
         }),
       };
@@ -101,7 +106,11 @@ export async function setOrderStatus(id: number, status: OrderStatus): Promise<v
 const toAdminProduct = (r: Record<string, unknown>): AdminProduct | null => {
   const base = toProduct(r);
   if (!base) return null;
-  return { ...base, archived: r.archived === true || r.deleted_at != null };
+  return {
+    ...base,
+    archived: r.archived === true || r.deleted_at != null,
+    code: String(r.code ?? ""),
+  };
 };
 
 export async function fetchAdminProducts(signal?: AbortSignal): Promise<AdminProduct[]> {
@@ -183,6 +192,7 @@ export async function restoreProduct(id: string): Promise<void> {
 
 const toLibraryAddon = (r: Record<string, unknown>): LibraryAddon => ({
   id: Math.floor(Number(r.id)),
+  code: String(r.code ?? ""),
   name: String(r.name ?? ""),
   price: Math.round(Number(r.price ?? 0)) || 0,
   image: normalizeImage(String(r.image ?? "")),

@@ -14,10 +14,11 @@ const mocked = vi.mocked(api);
 const piece = (id: string, name: string, archived = false): AdminProduct => ({
   id, name, price: 100, image: "", description: "", available: true,
   stock: undefined, max: undefined, freeAddons: 0, isNew: false, addons: [], archived,
+  code: `PRD-000${name.length}`,
 });
 
 const entry = (id: number, usedOn: string[] = []): LibraryAddon =>
-  ({ id, name: "Gift box", price: 150, image: "", usedOn });
+  ({ id, code: `EXT-${String(id).padStart(4, "0")}`, name: "Gift box", price: 150, image: "", usedOn });
 
 /** The 422 the server sends when a piece is already offering all twenty. */
 const refused = (key: string) =>

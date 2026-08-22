@@ -7,6 +7,7 @@ import { useAsync } from "./useAsync";
 import {
   CardList, EmptyState, Loading, LoadError, Money, PageHeader,
 } from "./components/ui";
+import { CodeTag } from "./components/CodeTag";
 import { ErrorText } from "../shop/components/ErrorText";
 
 /** "on 2 pieces" reads better than "0 pieces" ever does. */
@@ -122,7 +123,10 @@ function Row({
         : <div className="size-14 flex-none rounded-sm bg-surface-brand-soft" />}
 
       <div className="min-w-0 flex-1">
-        <p className="m-0 truncate font-display font-semibold">{entry.name}</p>
+        <p className="m-0 flex items-center gap-2">
+          <span className="truncate font-display font-semibold">{entry.name}</span>
+          <CodeTag code={entry.code} />
+        </p>
 
         {asking ? (
           /* Named, because deleting takes the extra off every piece at once — a

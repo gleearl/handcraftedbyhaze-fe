@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { fetchOrders } from "../lib/api/admin";
 import { useAsync } from "./useAsync";
 import { CardList, EmptyState, Loading, LoadError, Money, PageHeader, StatusPill } from "./components/ui";
+import { CodeText } from "./components/CodeTag";
 
 /* Dates are for a person deciding what to do today, so "2h ago" beats a
    timestamp until it stops being useful, then the date takes over. */
@@ -55,6 +56,7 @@ export function Orders() {
                   <span className="flex items-center gap-2">
                     <span className="truncate font-semibold">{o.customerName || "—"}</span>
                     <StatusPill status={o.status} />
+                    <CodeText code={o.code} />
                   </span>
                   <span className="mt-0.5 block truncate text-[.8125rem] text-fg-muted">
                     @{o.instagram} · {o.itemCount} {o.itemCount === 1 ? "item" : "items"} ·{" "}

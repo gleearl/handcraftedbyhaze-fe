@@ -36,8 +36,8 @@ const png = (name: string) => new File(["x"], name, { type: "image/png" });
 describe("extras on the product form", () => {
   it("ticks an extra from the library rather than typing one", async () => {
     mockLibrary([
-      { id: 7, name: "Gift box", price: 150, image: "", usedOn: [] },
-      { id: 9, name: "Pink flower", price: 20, image: "", usedOn: [] },
+      { id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: [] },
+      { id: 9, code: "EXT-0009", name: "Pink flower", price: 20, image: "", usedOn: [] },
     ]);
 
     renderForm("new");
@@ -73,7 +73,7 @@ describe("extras on the product form", () => {
 
   it("brings the tick list back when the retry works", async () => {
     mocked.fetchLibrary.mockRejectedValueOnce(new Error("down"));
-    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: [] }]);
+    mockLibrary([{ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: [] }]);
 
     renderForm("new");
 
@@ -87,7 +87,7 @@ describe("extras on the product form", () => {
   });
 
   it("counts against twenty, not ten", async () => {
-    mockLibrary([{ id: 7, name: "Gift box", price: 150, image: "", usedOn: [] }]);
+    mockLibrary([{ id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: [] }]);
     renderForm("new");
 
     expect(await screen.findByText(/0 of 20/)).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("extras on the product form", () => {
 
 describe("extras on a piece that already exists", () => {
   const croissant: AdminProduct = {
-    id: "croissant", name: "Croissant", price: 175, image: "/storage/c.png",
+    id: "croissant", code: "PRD-0004", name: "Croissant", price: 175, image: "/storage/c.png",
     description: "", available: true, stock: undefined, max: undefined,
     freeAddons: 0, isNew: false, archived: false,
     addons: [
@@ -108,9 +108,9 @@ describe("extras on a piece that already exists", () => {
   beforeEach(() => {
     mocked.fetchAdminProducts.mockResolvedValue([croissant]);
     mockLibrary([
-      { id: 7, name: "Gift box", price: 150, image: "", usedOn: ["croissant"] },
-      { id: 9, name: "Pink flower", price: 40, image: "", usedOn: ["croissant"] },
-      { id: 11, name: "Ribbon", price: 0, image: "", usedOn: [] },
+      { id: 7, code: "EXT-0007", name: "Gift box", price: 150, image: "", usedOn: ["croissant"] },
+      { id: 9, code: "EXT-0009", name: "Pink flower", price: 40, image: "", usedOn: ["croissant"] },
+      { id: 11, code: "EXT-0011", name: "Ribbon", price: 0, image: "", usedOn: [] },
     ]);
   });
 

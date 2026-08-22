@@ -10,6 +10,7 @@ import { DRAG_HANDLE, dragLabel, useReorder, type DragProps } from "./useReorder
 import {
   CardList, EmptyState, Loading, LoadError, Money, PageHeader,
 } from "./components/ui";
+import { CodeTag } from "./components/CodeTag";
 import { ErrorText } from "../shop/components/ErrorText";
 
 export function Products() {
@@ -109,6 +110,7 @@ export function Products() {
               <li key={p.id} ref={rowRef(i)}>
                 <Row
                   id={p.id}
+                  code={p.code}
                   name={p.name}
                   price={p.price}
                   image={p.image}
@@ -143,6 +145,7 @@ export function Products() {
               <li key={p.id} className="opacity-60">
                 <Row
                   id={p.id}
+                  code={p.code}
                   name={p.name}
                   price={p.price}
                   image={p.image}
@@ -160,9 +163,9 @@ export function Products() {
 }
 
 function Row({
-  id, name, price, image, meta, busy, onHide, onUnhide, drag, dragLabel: label,
+  id, code, name, price, image, meta, busy, onHide, onUnhide, drag, dragLabel: label,
 }: {
-  id: string; name: string; price: number; image: string; meta: string;
+  id: string; code: string; name: string; price: number; image: string; meta: string;
   busy?: boolean; onHide?: () => void; onUnhide?: () => void;
   drag?: DragProps; dragLabel?: string;
 }) {
@@ -182,7 +185,10 @@ function Row({
         : <div className="size-14 flex-none rounded-sm bg-surface-brand-soft" />}
 
       <div className="min-w-0 flex-1">
-        <p className="m-0 truncate font-display font-semibold">{name}</p>
+        <p className="m-0 flex items-center gap-2">
+          <span className="truncate font-display font-semibold">{name}</span>
+          <CodeTag code={code} />
+        </p>
         <p className="m-0 truncate text-[.8125rem] text-fg-muted">
           <Money amount={price} /> {meta && `· ${meta}`}
         </p>

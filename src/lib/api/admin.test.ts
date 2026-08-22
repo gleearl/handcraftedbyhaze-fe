@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createAddon, createProduct, fetchLibrary, fetchOrder, fetchOrders, fetchSettings, saveSettings,
+  createAddon, createProduct, fetchAdminProducts, fetchLibrary, fetchOrder, fetchOrders, fetchSettings, saveSettings,
   sendTestEmail, setAddonProducts, setOrderStatus, updateAddon, updateProduct,
 } from "./admin";
 import { ApiError } from "./http";
@@ -20,15 +20,15 @@ afterEach(() => vi.unstubAllGlobals());
 describe("order mapping", () => {
   it("accepts Laravel's snake_case and unwraps the data envelope", async () => {
     fetchMock.mockResolvedValueOnce(json({ data: [{
-      id: 7, reference: "1029", customer_name: "Juan", instagram: "juandc",
-      fulfillment: "Delivery", subtotal: "525", status: "new",
+      id: 7, code: "ORD-0007", reference: "1029", customer_name: "Juan",
+      instagram: "juandc", fulfillment: "Delivery", subtotal: "525", status: "new",
       placed_at: "2026-08-18T02:00:00Z", item_count: 3,
     }]}));
 
     const [order] = await fetchOrders();
     expect(order).toEqual({
-      id: 7, reference: "1029", customerName: "Juan", instagram: "juandc",
-      fulfillment: "Delivery", subtotal: 525, status: "new",
+      id: 7, code: "ORD-0007", reference: "1029", customerName: "Juan",
+      instagram: "juandc", fulfillment: "Delivery", subtotal: 525, status: "new",
       placedAt: "2026-08-18T02:00:00Z", itemCount: 3,
     });
   });
@@ -48,7 +48,7 @@ describe("order mapping", () => {
 
     const order = await fetchOrder(7);
     expect(order.items).toEqual([
-      { name: "Pink Croissant", quantity: 3, unitPrice: 150, addons: [] },
+      { name: "Pink Croissant", quantity: 3, unitPrice: 150, image: "", addons: [] },
     ]);
     expect(order.receiptUrl).toBe("/api/admin/orders/7/receipt");
   });
@@ -222,5 +222,50 @@ describe("notification settings", () => {
     const error = await sendTestEmail().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 502, message: "API key is invalid" });
+  });
+});
+
+describe("codes", () => {
+  it("carries the code the admin files a record under", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: [{ id: 7, code: "ORD-0007" }] }));
+    expect((await fetchOrders())[0].code).toBe("ORD-0007");
+
+    fetchMock.mockResolvedValueOnce(json({ data: [{ id: "bunny", name: "Bunny", price: 250, code: "PRD-0002" }] }));
+    expect((await fetchAdminProducts())[0].code).toBe("PRD-0002");
+
+    fetchMock.mockResolvedValueOnce(json({ data: [{ id: 3, name: "Gift box", code: "EXT-0003" }] }));
+    expect((await fetchLibrary())[0].code).toBe("EXT-0003");
+  });
+
+  it("leaves the code empty rather than inventing one when it is missing", async () => {
+    // An older backend, or a row the migration has not reached yet.
+    fetchMock.mockResolvedValueOnce(json({ data: [{ id: 7 }] }));
+    expect((await fetchOrders())[0].code).toBe("");
+  });
+});
+
+describe("order photos", () => {
+  it("carries the photo of the piece and of each extra on a line", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: {
+      id: 7, subtotal: 400,
+      items: [{
+        name: "Bunny Buddy", quantity: 1, unit_price: 400,
+        image: "/storage/products/bunny.png",
+        addons: [{ name: "Gift box", price: 150, image: "/storage/products/box.png" }],
+      }],
+    }}));
+
+    const order = await fetchOrder(7);
+    expect(order.items[0].image).toBe("/storage/products/bunny.png");
+    expect(order.items[0].addons[0].image).toBe("/storage/products/box.png");
+  });
+
+  it("leaves a line without a photo blank rather than showing a broken image", async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: {
+      id: 7, items: [{ name: "Something delisted", quantity: 1, unit_price: 400 }],
+    }}));
+
+    const order = await fetchOrder(7);
+    expect(order.items[0].image).toBe("");
   });
 });

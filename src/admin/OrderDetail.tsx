@@ -7,6 +7,7 @@ import { meetupPlace } from "../config";
 import { peso } from "../lib/format";
 import { useAsync } from "./useAsync";
 import { Loading, LoadError, Money, StatusPill } from "./components/ui";
+import { CodeTag } from "./components/CodeTag";
 import { ErrorText } from "../shop/components/ErrorText";
 
 export function OrderDetail() {
@@ -63,6 +64,7 @@ function OrderView({ order, onChanged }: { order: Order; onChanged: () => void }
           Order #{order.id}
         </h1>
         <StatusPill status={order.status} />
+        <CodeTag code={order.code} />
       </div>
 
       <section className="mb-4 rounded-card border border-rule bg-surface p-4 shadow-card">
@@ -73,14 +75,37 @@ function OrderView({ order, onChanged }: { order: Order; onChanged: () => void }
             today's. Repricing a product must never rewrite what was paid. */}
         <div className="grid gap-2.5 text-[.9375rem]">
           {order.items.map((item, i) => (
-            <div key={i} className="flex justify-between gap-3.5">
-              <span>
+            <div key={i} className="flex items-start justify-between gap-3.5">
+              {/* Today's photo of the piece, and no alt text: the name it
+                  belongs to is right beside it. A line whose piece has left
+                  the catalogue simply has none. */}
+              {item.image && (
+                <img
+                  src={item.image}
+                  alt=""
+                  className="size-11 flex-none rounded-sm bg-surface-brand-soft object-cover"
+                />
+              )}
+              <span className="min-w-0 flex-1">
                 {item.quantity} × {item.name}
                 {/* What they chose, under the piece. unitPrice already
                     includes these — they say what it's made of. */}
                 {item.addons.length > 0 && (
-                  <span className="block text-[.8125rem] text-fg-muted">
-                    {item.addons.map((a) => a.name).join(", ")}
+                  <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1
+                                   text-[.8125rem] text-fg-muted">
+                    {item.addons.map((a, j) => (
+                      <span key={j} className="inline-flex items-center gap-1.5">
+                        {a.image && (
+                          <img
+                            src={a.image}
+                            alt=""
+                            className="size-5 flex-none rounded-[3px] bg-surface-brand-soft
+                                       object-cover"
+                          />
+                        )}
+                        {a.name}
+                      </span>
+                    ))}
                   </span>
                 )}
               </span>
