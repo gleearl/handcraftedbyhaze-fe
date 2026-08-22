@@ -16,7 +16,7 @@ const order = (over: Partial<Order> = {}): Order => ({
   receiptUrl: null,
   items: [{
     name: "Bunny Buddy", quantity: 1, unitPrice: 550, image: "/storage/products/bunny.png",
-    addons: [{ name: "Gift box", price: 150, image: "/storage/products/box.png" }],
+    addons: [{ name: "Gift box", price: 150, image: "/storage/products/box.png", code: "EXT-0007" }],
   }],
   ...over,
 });
@@ -57,7 +57,7 @@ describe("an order", () => {
     mocked.fetchOrder.mockResolvedValue(order({
       items: [{
         name: "Retired Bear", quantity: 2, unitPrice: 300, image: "",
-        addons: [{ name: "Anklet", price: 20, image: "" }],
+        addons: [{ name: "Anklet", price: 20, image: "", code: "" }],
       }],
     }));
 
@@ -66,5 +66,27 @@ describe("an order", () => {
     expect(await screen.findByText(/Retired Bear/)).toBeTruthy();
     expect(screen.getByText(/Anklet/)).toBeTruthy();
     expect(container.querySelectorAll("img")).toHaveLength(0);
+  });
+
+  it("names the library entry each extra came from", async () => {
+    mocked.fetchOrder.mockResolvedValue(order());
+
+    renderDetail();
+
+    expect(await screen.findByRole("button", { name: "Copy code EXT-0007" })).toBeTruthy();
+  });
+
+  it("leaves an extra the library no longer has uncoded", async () => {
+    mocked.fetchOrder.mockResolvedValue(order({
+      items: [{
+        name: "Retired Bear", quantity: 2, unitPrice: 300, image: "",
+        addons: [{ name: "Anklet", price: 20, image: "", code: "" }],
+      }],
+    }));
+
+    renderDetail();
+
+    expect(await screen.findByText(/Anklet/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Copy code EXT/ })).toBeNull();
   });
 });

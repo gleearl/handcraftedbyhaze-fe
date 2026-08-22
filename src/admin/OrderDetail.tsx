@@ -104,6 +104,9 @@ function OrderView({ order, onChanged }: { order: Order; onChanged: () => void }
                           />
                         )}
                         {a.name}
+                        {/* Nothing wraps this row in a link, so the extra's
+                            code can be the copyable kind. */}
+                        <CodeTag code={a.code} />
                       </span>
                     ))}
                   </span>

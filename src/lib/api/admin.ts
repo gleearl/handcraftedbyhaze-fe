@@ -87,6 +87,7 @@ export async function fetchOrder(id: number, signal?: AbortSignal): Promise<Orde
             name: String(addon.name ?? ""),
             price: Math.round(Number(addon.price ?? 0)) || 0,
             image: normalizeImage(String(addon.image ?? "")),
+            code: String(addon.code ?? ""),
           };
         }),
       };

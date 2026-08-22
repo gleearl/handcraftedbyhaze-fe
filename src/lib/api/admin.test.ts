@@ -251,13 +251,17 @@ describe("order photos", () => {
       items: [{
         name: "Bunny Buddy", quantity: 1, unit_price: 400,
         image: "/storage/products/bunny.png",
-        addons: [{ name: "Gift box", price: 150, image: "/storage/products/box.png" }],
+        addons: [{
+          name: "Gift box", price: 150, image: "/storage/products/box.png",
+          code: "EXT-0007",
+        }],
       }],
     }}));
 
     const order = await fetchOrder(7);
     expect(order.items[0].image).toBe("/storage/products/bunny.png");
     expect(order.items[0].addons[0].image).toBe("/storage/products/box.png");
+    expect(order.items[0].addons[0].code).toBe("EXT-0007");
   });
 
   it("leaves a line without a photo blank rather than showing a broken image", async () => {

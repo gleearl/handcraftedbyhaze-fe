@@ -89,7 +89,13 @@ export interface OrderItem {
   unitPrice: number;
   /** The piece's photo as it looks today; "" once it has left the catalogue. */
   image: string;
-  addons: { name: string; price: number; image: string }[];
+  addons: {
+    name: string;
+    price: number;
+    image: string;
+    /** The library entry's code; "" once that entry has been deleted. */
+    code: string;
+  }[];
 }
 
 export interface OrderSummary {
